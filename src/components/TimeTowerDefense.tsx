@@ -19,7 +19,10 @@ type TowerKind = {
   damage: number;
   range: number;
   cooldown: number;
+  levelDescriptions: [string, string, string];
 };
+
+type TargetPriority = 'first' | 'strongest' | 'weakest';
 
 type Difficulty = {
   id: 'easy' | 'experienced' | 'hard' | 'antiTime';
@@ -38,12 +41,16 @@ type Enemy = {
   maxHp: number;
   slowedUntil: number;
   isBoss: boolean;
+  lastHitAt: number;
+  lastHitKind: TowerKind['id'] | null;
+  lastDamage: number;
 };
 
 type Tower = {
   id: number;
   cell: number;
   kind: TowerKind['id'];
+  targetPriority: TargetPriority;
   level: number;
   invested: number;
   lastShotAt: number;
@@ -51,12 +58,12 @@ type Tower = {
   lastTargetCell: number | null;
 };
 
-const boardSize = 8;
+const boardSize = 10;
 const maxTowerLevel = 3;
 const maxWaves = 40;
 const baseWaveDuration = 30;
-const pathCells = [0, 1, 2, 10, 18, 26, 27, 28, 36, 44, 52, 53, 54, 55, 63];
-const buildCells = [9, 11, 17, 19, 25, 29, 34, 35, 37, 43, 45, 50, 51, 57, 58, 59];
+const pathCells = [0, 1, 2, 3, 13, 23, 33, 34, 35, 45, 55, 65, 64, 63, 73, 83, 84, 85, 86, 96, 97, 98, 99];
+const buildCells = [11, 12, 14, 21, 22, 24, 31, 32, 36, 37, 42, 43, 44, 46, 47, 54, 56, 57, 62, 66, 67, 72, 74, 75, 82, 87, 88, 92, 93, 94, 95];
 
 const eras: Era[] = [
   {
@@ -98,9 +105,46 @@ const eras: Era[] = [
 ];
 
 const towerKinds: TowerKind[] = [
-  { id: 'arrow', name: 'Стрелок', icon: 'A', cost: 35, damage: 18, range: 1.8, cooldown: 850 },
-  { id: 'slow', name: 'Хроно', icon: 'C', cost: 55, damage: 8, range: 2.1, cooldown: 1100 },
-  { id: 'blast', name: 'Пушка', icon: 'B', cost: 80, damage: 38, range: 1.5, cooldown: 1450 },
+  {
+    id: 'arrow',
+    name: 'Стрелок',
+    icon: 'A',
+    cost: 35,
+    damage: 18,
+    range: 1.8,
+    cooldown: 850,
+    levelDescriptions: ['Старый лук: быстрые простые выстрелы.', 'Новый лук: больше урона и точнее прицел.', 'Мастер-лучник: серия мощных выстрелов по линии.'],
+  },
+  {
+    id: 'slow',
+    name: 'Хроно',
+    icon: 'C',
+    cost: 55,
+    damage: 8,
+    range: 2.1,
+    cooldown: 1100,
+    levelDescriptions: [
+      'Песочные часы: слегка замедляет время врага.',
+      'Хронологическая достоверность: время врага сбивается сильнее.',
+      'Разлом времени: враг надолго застревает в секунде.',
+    ],
+  },
+  {
+    id: 'blast',
+    name: 'Пушка',
+    icon: 'B',
+    cost: 80,
+    damage: 38,
+    range: 1.5,
+    cooldown: 1450,
+    levelDescriptions: ['Пороховой заряд: тяжелый одиночный удар.', 'Усиленное ядро: взрыв бьет заметно больнее.', 'Осадная машина: максимальный урон по крепким целям.'],
+  },
+];
+
+const targetPriorityOptions: { id: TargetPriority; name: string; description: string }[] = [
+  { id: 'first', name: 'Первый', description: 'Атакует врага ближе всего к порталу' },
+  { id: 'strongest', name: 'Сильный', description: 'Атакует врага с самым большим HP' },
+  { id: 'weakest', name: 'Слабый', description: 'Атакует врага с самым маленьким HP' },
 ];
 
 const difficultyModes: Difficulty[] = [
@@ -159,6 +203,16 @@ function getEnemyCell(enemy: Enemy) {
   return pathCells[Math.min(enemy.step, pathCells.length - 1)];
 }
 
+function getTileDetailClass(cell: number) {
+  if (cell === pathCells[0]) return 'start-gate';
+  if (cell === pathCells[pathCells.length - 1]) return 'time-portal';
+  if (pathCells.includes(cell)) return cell % 2 === 0 ? 'path-stones' : 'path-dust';
+  if (buildCells.includes(cell)) return cell % 3 === 0 ? 'build-plate' : 'build-grass';
+  if (cell % 11 === 0 || cell % 17 === 0) return 'terrain-rocks';
+  if (cell % 7 === 0) return 'terrain-flowers';
+  return cell % 5 === 0 ? 'terrain-grass' : 'terrain-soft';
+}
+
 function getWaveDuration(wave: number) {
   return baseWaveDuration + Math.min(20, wave * 3);
 }
@@ -175,6 +229,11 @@ function getTowerStats(tower: Tower) {
     range: kind.range + (tower.level - 1) * 0.22,
     cooldown: Math.max(420, kind.cooldown - (tower.level - 1) * 110),
   };
+}
+
+function getTowerLevelDescription(tower: Tower, level = tower.level) {
+  const descriptionIndex = Math.min(maxTowerLevel, Math.max(1, level)) - 1;
+  return getTowerKind(tower.kind).levelDescriptions[descriptionIndex];
 }
 
 function getUpgradeCost(tower: Tower) {
@@ -196,6 +255,24 @@ function getDps(damage: number, cooldown: number) {
 function getLandscapeRefund(towers: Tower[]) {
   const invested = towers.reduce((total, tower) => total + tower.invested, 0);
   return Math.round(invested * 1.2);
+}
+
+function getTargetPriorityName(priority: TargetPriority) {
+  return targetPriorityOptions.find((option) => option.id === priority)?.name ?? targetPriorityOptions[0].name;
+}
+
+function chooseTowerTarget(tower: Tower, enemies: Enemy[], range: number) {
+  const targets = enemies.filter((enemy) => distanceBetweenCells(tower.cell, getEnemyCell(enemy)) <= range);
+
+  if (tower.targetPriority === 'strongest') {
+    return targets.sort((a, b) => b.hp - a.hp || b.step - a.step || Number(b.isBoss) - Number(a.isBoss))[0];
+  }
+
+  if (tower.targetPriority === 'weakest') {
+    return targets.sort((a, b) => a.hp - b.hp || b.step - a.step || Number(b.isBoss) - Number(a.isBoss))[0];
+  }
+
+  return targets.sort((a, b) => b.step - a.step || Number(b.isBoss) - Number(a.isBoss))[0];
 }
 
 function isBossWave(wave: number) {
@@ -285,6 +362,9 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           maxHp,
           slowedUntil: 0,
           isBoss: boss,
+          lastHitAt: 0,
+          lastHitKind: null,
+          lastDamage: 0,
         },
       ]);
 
@@ -318,9 +398,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
             return tower;
           }
 
-          const target = nextEnemies
-            .filter((enemy) => distanceBetweenCells(tower.cell, getEnemyCell(enemy)) <= stats.range)
-            .sort((a, b) => b.step - a.step || Number(b.isBoss) - Number(a.isBoss))[0];
+          const target = chooseTowerTarget(tower, nextEnemies, stats.range);
 
           if (!target) return tower;
 
@@ -330,6 +408,9 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
               ...enemy,
               hp: enemy.hp - stats.damage,
               slowedUntil: stats.id === 'slow' ? now + 1800 + tower.level * 260 : enemy.slowedUntil,
+              lastHitAt: now,
+              lastHitKind: stats.id,
+              lastDamage: stats.damage,
             };
           });
 
@@ -418,6 +499,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
         id: towerId,
         cell,
         kind: selectedTower,
+        targetPriority: 'first',
         level: 1,
         invested: selectedTowerData.cost,
         lastShotAt: 0,
@@ -457,6 +539,11 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     setSelectedTowerId(null);
     setCoins((current) => current + refund);
     setMessage(`${getTowerKind(tower.kind).name} продан за ${refund} монет.`);
+  }
+
+  function setTowerTargetPriority(tower: Tower, targetPriority: TargetPriority) {
+    setTowers((current) => current.map((item) => (item.id === tower.id ? { ...item, targetPriority } : item)));
+    setMessage(`${getTowerKind(tower.kind).name}: цель — ${getTargetPriorityName(targetPriority).toLowerCase()}.`);
   }
 
   function resetGame(mode: Difficulty) {
@@ -606,6 +693,26 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
               {' · '}DPS {getDps(getTowerStats(selectedPlacedTower).damage, getTowerStats(selectedPlacedTower).cooldown)}
               {' · '}Продажа {getSellRefund(selectedPlacedTower)}
             </p>
+            <div className="upgrade-description">
+              <span>{getTowerLevelDescription(selectedPlacedTower)}</span>
+              {selectedPlacedTower.level < maxTowerLevel && (
+                <small>Следующее: {getTowerLevelDescription(selectedPlacedTower, selectedPlacedTower.level + 1)}</small>
+              )}
+            </div>
+            <div className="target-priority-control" aria-label="Приоритет цели башни">
+              {targetPriorityOptions.map((option) => (
+                <button
+                  key={option.id}
+                  className={selectedPlacedTower.targetPriority === option.id ? 'active' : ''}
+                  type="button"
+                  onClick={() => setTowerTargetPriority(selectedPlacedTower, option.id)}
+                  title={option.description}
+                  aria-pressed={selectedPlacedTower.targetPriority === option.id}
+                >
+                  {option.name}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="tower-actions">
             <button
@@ -641,6 +748,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                 'tile',
                 isPath ? 'path' : '',
                 canBuild ? 'build' : '',
+                getTileDetailClass(cell),
                 tower ? 'has-tower' : '',
                 isSelectedTower ? 'selected-tower' : '',
               ].join(' ')}
@@ -669,13 +777,16 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                     'time-distorted',
                     enemy.isBoss ? 'boss' : '',
                     enemy.slowedUntil > Date.now() ? 'slowed' : '',
+                    enemy.lastHitAt > 0 ? 'hit' : '',
+                    enemy.lastHitKind ? `hit-${enemy.lastHitKind}` : '',
                   ].join(' ')}
-                  key={enemy.id}
+                  key={`${enemy.id}-${enemy.lastHitAt}`}
                   style={{ animationDelay: `${index * 120}ms` }}
                 >
                   <span className="time-ring" />
                   <span className="time-ring late" />
                   <span className="enemy-core">{enemy.isBoss ? '!' : era.enemy}</span>
+                  {enemy.lastDamage > 0 && <span className="damage-pop">-{enemy.lastDamage}</span>}
                   <span className="enemy-tooltip">
                     {enemy.isBoss ? 'Босс · ' : ''}
                     HP {Math.max(0, Math.ceil(enemy.hp))}/{enemy.maxHp}
