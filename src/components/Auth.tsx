@@ -1,7 +1,7 @@
 import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 
-// Вход и регистрация по email + паролю. Это пример — Codex поможет улучшить (Google-вход и т.д.).
 export function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -9,18 +9,28 @@ export function Auth() {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!supabase) {
+      setMessage('Supabase не настроен. Сейчас игра доступна в режиме гостя.');
+      return;
+    }
+
     setBusy(true);
     setMessage('');
+
     try {
-      const fn =
+      const authRequest =
         mode === 'signup'
           ? supabase.auth.signUp({ email, password })
           : supabase.auth.signInWithPassword({ email, password });
-      const { error } = await fn;
-      if (error) setMessage(error.message);
-      else if (mode === 'signup') setMessage('Готово! Проверь почту, если нужна подтверждалка.');
+
+      const { error } = await authRequest;
+      if (error) {
+        setMessage(error.message);
+      } else if (mode === 'signup') {
+        setMessage('Готово! Проверь почту, если Supabase попросит подтвердить аккаунт.');
+      }
     } catch {
       setMessage('Что-то пошло не так. Попробуй ещё раз.');
     } finally {
@@ -29,8 +39,8 @@ export function Auth() {
   }
 
   return (
-    <section className="card">
-      <h2>{mode === 'signin' ? 'Вход' : 'Регистрация'}</h2>
+    <section className="card auth-card">
+      <h2>{mode === 'signin' ? 'Вход в игру' : 'Создать аккаунт'}</h2>
       <form onSubmit={handleSubmit} className="form">
         <input
           type="email"
@@ -41,22 +51,19 @@ export function Auth() {
         />
         <input
           type="password"
-          placeholder="пароль (6+ символов)"
+          placeholder="пароль, минимум 6 символов"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           minLength={6}
           required
         />
         <button type="submit" disabled={busy}>
-          {busy ? '…' : mode === 'signin' ? 'Войти' : 'Создать аккаунт'}
+          {busy ? 'Подождите...' : mode === 'signin' ? 'Войти' : 'Зарегистрироваться'}
         </button>
       </form>
       {message && <p className="message">{message}</p>}
-      <button
-        className="ghost"
-        onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
-      >
-        {mode === 'signin' ? 'Нет аккаунта? Зарегистрируйся' : 'Уже есть аккаунт? Войти'}
+      <button className="ghost auth-switch" onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}>
+        {mode === 'signin' ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
       </button>
     </section>
   );
