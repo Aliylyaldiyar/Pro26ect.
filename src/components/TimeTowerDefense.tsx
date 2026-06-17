@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, PointerEvent } from 'react';
 
 type Era = {
   name: string;
@@ -34,6 +34,16 @@ type Difficulty = {
   extraEnemies: number;
 };
 
+type GameScreen = 'start' | 'levels' | 'difficulty' | 'battle';
+
+type LevelMapItem = {
+  id: number;
+  title: string;
+  chapter: string;
+  startWave: number;
+  description: string;
+};
+
 type Enemy = {
   id: number;
   step: number;
@@ -62,8 +72,18 @@ const boardSize = 10;
 const maxTowerLevel = 3;
 const maxWaves = 40;
 const baseWaveDuration = 30;
+const skipUnlockDelay = 25;
 const pathCells = [0, 1, 2, 3, 13, 23, 33, 34, 35, 45, 55, 65, 64, 63, 73, 83, 84, 85, 86, 96, 97, 98, 99];
 const buildCells = [11, 12, 14, 21, 22, 24, 31, 32, 36, 37, 42, 43, 44, 46, 47, 54, 56, 57, 62, 66, 67, 72, 74, 75, 82, 87, 88, 92, 93, 94, 95];
+
+const levelMap: LevelMapItem[] = [
+  { id: 1, title: 'Искра времени', chapter: 'Обучение', startWave: 1, description: 'Первые башни и спокойные враги.' },
+  { id: 2, title: 'Каменная тропа', chapter: 'Обучение', startWave: 4, description: 'Дорога становится длиннее и опаснее.' },
+  { id: 3, title: 'Ворота замка', chapter: 'Средние уровни', startWave: 8, description: 'Появляются более крепкие волны.' },
+  { id: 4, title: 'Паровой район', chapter: 'Средние уровни', startWave: 12, description: 'Нужно точнее выбирать башни.' },
+  { id: 5, title: 'Разлом секунд', chapter: 'Сложные уровни', startWave: 18, description: 'Боссы приходят чаще и давят сильнее.' },
+  { id: 6, title: 'Финальный портал', chapter: 'Сложные уровни', startWave: 26, description: 'Проверка всей защиты линии времени.' },
+];
 
 const eras: Era[] = [
   {
@@ -279,7 +299,13 @@ function isBossWave(wave: number) {
   return wave > 0 && wave % 3 === 0;
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
 export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
+  const [screen, setScreen] = useState<GameScreen>('start');
+  const [selectedLevelId, setSelectedLevelId] = useState(1);
   const [difficulty, setDifficulty] = useState<Difficulty['id']>('easy');
   const selectedDifficultyData = difficultyModes.find((mode) => mode.id === difficulty) ?? difficultyModes[0];
   const [eraIndex, setEraIndex] = useState(0);
@@ -295,11 +321,28 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   const [isVictory, setIsVictory] = useState(false);
   const [waveTimeLeft, setWaveTimeLeft] = useState(getWaveDuration(1));
   const [message, setMessage] = useState('Поставь башни и запусти первую волну.');
+  const [boardTilt, setBoardTilt] = useState(35);
+  const [boardTurn, setBoardTurn] = useState(358);
+  const [boardZoom, setBoardZoom] = useState(1);
+  const boardRef = useRef<HTMLDivElement | null>(null);
+  const cameraDragRef = useRef({
+    active: false,
+    hasMoved: false,
+    startX: 0,
+    startY: 0,
+    startTilt: 35,
+    startTurn: 358,
+  });
+  const ignoreNextBoardClickRef = useRef(false);
 
   const era = eras[eraIndex];
   const selectedTowerData = getTowerKind(selectedTower);
   const selectedPlacedTower = towers.find((tower) => tower.id === selectedTowerId) ?? null;
+  const selectedLevel = levelMap.find((level) => level.id === selectedLevelId) ?? levelMap[0];
   const enemiesInCurrentWave = 5 + wave * 2 + selectedDifficultyData.extraEnemies + (isBossWave(wave) ? 1 : 0);
+  const waveElapsedSeconds = Math.max(0, getWaveDuration(wave) - waveTimeLeft);
+  const skipSecondsLeft = Math.max(0, skipUnlockDelay - waveElapsedSeconds);
+  const canSkipWave = isWaveRunning && skipSecondsLeft === 0 && lives > 0 && !isVictory;
 
   const enemiesByCell = useMemo(() => {
     const map = new Map<number, Enemy[]>();
@@ -309,6 +352,21 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     });
     return map;
   }, [enemies]);
+
+  useEffect(() => {
+    const board = boardRef.current;
+    if (!board) return;
+
+    function handleWheel(event: globalThis.WheelEvent) {
+      event.preventDefault();
+      event.stopPropagation();
+      setBoardZoom((current) => clamp(Number((current - event.deltaY * 0.0012).toFixed(2)), 0.65, 1.45));
+    }
+
+    board.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => board.removeEventListener('wheel', handleWheel);
+  }, []);
 
   useEffect(() => {
     if (!isWaveRunning) return;
@@ -477,6 +535,11 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   }, [lives]);
 
   function handleCellClick(cell: number) {
+    if (ignoreNextBoardClickRef.current) {
+      ignoreNextBoardClickRef.current = false;
+      return;
+    }
+
     const existingTower = towers.find((tower) => tower.cell === cell);
     if (existingTower) {
       setSelectedTowerId(existingTower.id);
@@ -546,9 +609,9 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     setMessage(`${getTowerKind(tower.kind).name}: цель — ${getTargetPriorityName(targetPriority).toLowerCase()}.`);
   }
 
-  function resetGame(mode: Difficulty) {
+  function resetGame(mode: Difficulty, startWaveNumber = selectedLevel.startWave) {
     setEraIndex(0);
-    setWave(1);
+    setWave(startWaveNumber);
     setCoins(mode.startCoins);
     setLives(mode.startLives);
     setIsVictory(false);
@@ -557,14 +620,22 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     setEnemies([]);
     setSpawnedCount(0);
     setIsWaveRunning(false);
-    setWaveTimeLeft(getWaveDuration(1));
+    setWaveTimeLeft(getWaveDuration(startWaveNumber));
   }
 
   function selectDifficulty(mode: Difficulty) {
     if (isWaveRunning) return;
     setDifficulty(mode.id);
-    resetGame(mode);
-    setMessage(`${mode.name}: ${mode.description}`);
+    resetGame(mode, selectedLevel.startWave);
+    setScreen('battle');
+    setMessage(`${selectedLevel.title}. ${mode.name}: ${mode.description}`);
+  }
+
+  function selectLevel(level: LevelMapItem) {
+    if (isWaveRunning) return;
+    setSelectedLevelId(level.id);
+    setScreen('difficulty');
+    setMessage(`${level.title}: ${level.description}`);
   }
 
   function startWave() {
@@ -582,7 +653,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   }
 
   function skipWave() {
-    if (!isWaveRunning || lives === 0 || isVictory) return;
+    if (!canSkipWave) return;
 
     const nextWave = wave + 1;
     if (nextWave > maxWaves) {
@@ -610,8 +681,47 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   }
 
   function restartGame() {
-    resetGame(selectedDifficultyData);
+    resetGame(selectedDifficultyData, selectedLevel.startWave);
     setMessage(`Новая временная линия готова. Сложность: ${selectedDifficultyData.name}.`);
+  }
+
+  function startCameraDrag(event: PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+
+    cameraDragRef.current = {
+      active: true,
+      hasMoved: false,
+      startX: event.clientX,
+      startY: event.clientY,
+      startTilt: boardTilt,
+      startTurn: boardTurn,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function moveCamera(event: PointerEvent<HTMLDivElement>) {
+    const drag = cameraDragRef.current;
+    if (!drag.active) return;
+
+    const deltaX = event.clientX - drag.startX;
+    const deltaY = event.clientY - drag.startY;
+    if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+      drag.hasMoved = true;
+    }
+
+    setBoardTurn(drag.startTurn + deltaX * 0.22);
+    setBoardTilt(clamp(drag.startTilt + deltaY * 0.12, 15, 70));
+  }
+
+  function stopCameraDrag(event: PointerEvent<HTMLDivElement>) {
+    const drag = cameraDragRef.current;
+    if (!drag.active) return;
+
+    cameraDragRef.current = { ...drag, active: false };
+    if (drag.hasMoved) {
+      ignoreNextBoardClickRef.current = true;
+    }
+    event.currentTarget.releasePointerCapture(event.pointerId);
   }
 
   return (
@@ -621,18 +731,67 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           <p className="hello">Игрок: {userEmail}</p>
           <h2>Chrono Defense</h2>
           <p className="era-line">
-            {era.name} · {era.year}
+            {screen === 'battle' ? `${era.name} · ${era.year}` : selectedLevel.title}
           </p>
         </div>
-        <div className="stats">
-          <span>Волна {wave}/{maxWaves}</span>
-          <span>{waveTimeLeft} сек</span>
-          <span>{coins} монет</span>
-          <span>{lives} жизней</span>
-        </div>
+        {screen === 'battle' && (
+          <div className="stats">
+            <span>Волна {wave}/{maxWaves}</span>
+            <span>{waveTimeLeft} сек</span>
+            <span>{coins} монет</span>
+            <span>{lives} жизней</span>
+          </div>
+        )}
       </div>
 
-      <div className="era-panel">
+      {screen === 'start' && (
+        <section className="menu-screen">
+          <div>
+            <h3>Начальный экран</h3>
+            <p>Выбери старт, чтобы перейти к карте уровней. Настройки камеры уже доступны в бою: мышь крутит карту, колесико меняет масштаб.</p>
+          </div>
+          <div className="menu-actions">
+            <button type="button" onClick={() => setScreen('levels')}>
+              Начать
+            </button>
+            <button className="secondary" type="button" onClick={() => setScreen('difficulty')}>
+              Настройки
+            </button>
+          </div>
+        </section>
+      )}
+
+      {screen === 'levels' && (
+        <section className="level-screen">
+          <div className="screen-heading">
+            <h3>Карта уровней</h3>
+            <p>Игрок проходит уровни по порядку, но сейчас можно выбрать любой уровень для теста.</p>
+          </div>
+          <div className="level-map">
+            {levelMap.map((level) => (
+              <button
+                key={level.id}
+                className={selectedLevelId === level.id ? 'level-node active' : 'level-node'}
+                type="button"
+                onClick={() => selectLevel(level)}
+              >
+                <small>{level.chapter}</small>
+                <strong>{level.id}. {level.title}</strong>
+                <span>Старт с волны {level.startWave}</span>
+                <em>{level.description}</em>
+              </button>
+            ))}
+          </div>
+          <div className="menu-actions">
+            <button className="ghost" type="button" onClick={() => setScreen('start')}>
+              Назад
+            </button>
+          </div>
+        </section>
+      )}
+
+      {screen === 'battle' && (
+        <div className="era-panel">
         <div className={`era-preview ${era.ground}`}>
           <span>{era.tower}</span>
         </div>
@@ -644,8 +803,15 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
               : era.description}
         </p>
       </div>
+      )}
 
-      <div className="difficulty-panel" aria-label="Выбор сложности">
+      {screen === 'difficulty' && (
+        <section className="difficulty-screen">
+          <div className="screen-heading">
+            <h3>Выбор сложности</h3>
+            <p>{selectedLevel.title}: старт с волны {selectedLevel.startWave}. После выбора сложности откроется карта битвы.</p>
+          </div>
+          <div className="difficulty-panel" aria-label="Выбор сложности">
         {difficultyModes.map((mode) => (
           <button
             key={mode.id}
@@ -662,7 +828,16 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           </button>
         ))}
       </div>
+          <div className="menu-actions">
+            <button className="ghost" type="button" onClick={() => setScreen('levels')}>
+              Назад к уровням
+            </button>
+          </div>
+        </section>
+      )}
 
+      {screen === 'battle' && (
+        <>
       <div className="tower-bar" aria-label="Выбор башни">
         {towerKinds.map((tower) => (
           <button
@@ -730,7 +905,24 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
         </div>
       )}
 
-      <div className="board" aria-label="Поле tower defence">
+      <div
+        ref={boardRef}
+        className="board"
+        style={
+          {
+            '--board-tilt': `${boardTilt}deg`,
+            '--board-turn': `${boardTurn}deg`,
+            '--board-tilt-inverse': `${-boardTilt}deg`,
+            '--board-turn-inverse': `${-boardTurn}deg`,
+            '--board-zoom': boardZoom,
+          } as CSSProperties
+        }
+        onPointerDown={startCameraDrag}
+        onPointerMove={moveCamera}
+        onPointerUp={stopCameraDrag}
+        onPointerCancel={stopCameraDrag}
+        aria-label="Поле tower defence"
+      >
         {Array.from({ length: boardSize * boardSize }, (_, cell) => {
           const tower = towers.find((item) => item.cell === cell);
           const towerKind = getTowerKind(tower?.kind ?? selectedTower);
@@ -753,6 +945,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                 isSelectedTower ? 'selected-tower' : '',
               ].join(' ')}
               type="button"
+              onPointerDown={(event) => event.stopPropagation()}
               onClick={() => handleCellClick(cell)}
               disabled={(!canBuild && !tower) || (isWaveRunning && !tower)}
               aria-label={canBuild ? 'Поставить или улучшить башню' : 'Клетка пути'}
@@ -803,15 +996,20 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
         <button type="button" onClick={startWave} disabled={isWaveRunning || lives === 0 || isVictory}>
           {isVictory ? 'Победа' : isWaveRunning ? 'Волна идет' : 'Запустить волну'}
         </button>
-        <button className="secondary" type="button" onClick={skipWave} disabled={!isWaveRunning || lives === 0 || isVictory}>
-          Скип волны
+        <button className="secondary" type="button" onClick={skipWave} disabled={!canSkipWave}>
+          {isWaveRunning && skipSecondsLeft > 0 ? `Скип через ${skipSecondsLeft}с` : 'Скип волны'}
         </button>
         <button className="ghost" type="button" onClick={restartGame}>
           Заново
         </button>
+        <button className="ghost" type="button" onClick={() => setScreen('levels')} disabled={isWaveRunning}>
+          Карта уровней
+        </button>
       </div>
 
       <p className="message">{message}</p>
+        </>
+      )}
     </section>
   );
 }
