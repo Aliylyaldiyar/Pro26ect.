@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, PointerEvent } from 'react';
+import type { CSSProperties, FormEvent, PointerEvent } from 'react';
 
 type Era = {
   name: string;
@@ -23,25 +23,38 @@ type TowerKind = {
 };
 
 type TargetPriority = 'first' | 'strongest' | 'weakest';
+type TowerSlot = TowerKind['id'] | null;
 
 type Difficulty = {
   id: 'easy' | 'experienced' | 'hard' | 'antiTime';
   name: string;
   description: string;
   startCoins: number;
-  startLives: number;
+  startBaseHp: number;
   hpMultiplier: number;
   extraEnemies: number;
 };
 
-type GameScreen = 'start' | 'levels' | 'difficulty' | 'battle';
+type GameScreen = 'profile' | 'start' | 'levels' | 'difficulty' | 'battle';
 
 type LevelMapItem = {
   id: number;
   title: string;
+  mapTitle: string;
+  mapArea: 'stone' | 'ancient' | 'medieval' | 'industrial' | 'future' | 'cyber';
   chapter: string;
   startWave: number;
   description: string;
+};
+
+type LevelMapPoint = {
+  x: number;
+  y: number;
+};
+
+type MapDecoration = LevelMapPoint & {
+  kind: 'platform' | 'distortion' | 'base' | 'cave' | 'temple' | 'castle' | 'factory' | 'futureCity' | 'cyberCity';
+  label: string;
 };
 
 type Enemy = {
@@ -77,13 +90,47 @@ const pathCells = [0, 1, 2, 3, 13, 23, 33, 34, 35, 45, 55, 65, 64, 63, 73, 83, 8
 const buildCells = [11, 12, 14, 21, 22, 24, 31, 32, 36, 37, 42, 43, 44, 46, 47, 54, 56, 57, 62, 66, 67, 72, 74, 75, 82, 87, 88, 92, 93, 94, 95];
 
 const levelMap: LevelMapItem[] = [
-  { id: 1, title: 'Искра времени', chapter: 'Обучение', startWave: 1, description: 'Первые башни и спокойные враги.' },
-  { id: 2, title: 'Каменная тропа', chapter: 'Обучение', startWave: 4, description: 'Дорога становится длиннее и опаснее.' },
-  { id: 3, title: 'Ворота замка', chapter: 'Средние уровни', startWave: 8, description: 'Появляются более крепкие волны.' },
-  { id: 4, title: 'Паровой район', chapter: 'Средние уровни', startWave: 12, description: 'Нужно точнее выбирать башни.' },
-  { id: 5, title: 'Разлом секунд', chapter: 'Сложные уровни', startWave: 18, description: 'Боссы приходят чаще и давят сильнее.' },
-  { id: 6, title: 'Финальный портал', chapter: 'Сложные уровни', startWave: 26, description: 'Проверка всей защиты линии времени.' },
+  { id: 1, title: 'Искра времени', mapTitle: 'Каменный век', mapArea: 'stone', chapter: 'Обучение', startWave: 1, description: 'Первые башни и спокойные враги.' },
+  { id: 2, title: 'Каменная тропа', mapTitle: 'Античность', mapArea: 'ancient', chapter: 'Обучение', startWave: 4, description: 'Дорога становится длиннее и опаснее.' },
+  { id: 3, title: 'Ворота замка', mapTitle: 'Средневековье', mapArea: 'medieval', chapter: 'Средние уровни', startWave: 8, description: 'Появляются более крепкие волны.' },
+  { id: 4, title: 'Паровой район', mapTitle: 'Индустриальная эпоха', mapArea: 'industrial', chapter: 'Средние уровни', startWave: 12, description: 'Нужно точнее выбирать башни.' },
+  { id: 5, title: 'Разлом секунд', mapTitle: 'Будущее', mapArea: 'future', chapter: 'Сложные уровни', startWave: 18, description: 'Боссы приходят чаще и давят сильнее.' },
+  { id: 6, title: 'Финальный портал', mapTitle: 'Киберпанк', mapArea: 'cyber', chapter: 'Сложные уровни', startWave: 26, description: 'Проверка всей защиты линии времени.' },
 ];
+
+const levelMapSize = 30;
+const levelMapPositions: Record<number, LevelMapPoint> = {
+  1: { x: 4, y: 8 },
+  2: { x: 13, y: 7 },
+  3: { x: 23, y: 12 },
+  4: { x: 4, y: 24 },
+  5: { x: 24, y: 24 },
+  6: { x: 13, y: 25 },
+};
+
+const levelRiftPoint: LevelMapPoint = { x: 15.5, y: 15.5 };
+const levelRouteSegments = levelMap.flatMap((level) => [
+  [levelMapPositions[level.id], levelRiftPoint] as const,
+]);
+const mapDecorations: MapDecoration[] = [
+  { kind: 'cave', x: 2, y: 2, label: 'Пещера' },
+  { kind: 'temple', x: 14, y: 3, label: 'Храм' },
+  { kind: 'castle', x: 24, y: 3, label: 'Замок' },
+  { kind: 'factory', x: 3, y: 18, label: 'Завод' },
+  { kind: 'futureCity', x: 24, y: 18, label: 'Город будущего' },
+  { kind: 'cyberCity', x: 13, y: 22, label: 'Кибергород' },
+  { kind: 'platform', x: 7, y: 10, label: 'Платформа' },
+  { kind: 'platform', x: 11, y: 14, label: 'Платформа' },
+  { kind: 'platform', x: 20, y: 14, label: 'Платформа' },
+  { kind: 'platform', x: 23, y: 22, label: 'Платформа' },
+  { kind: 'platform', x: 8, y: 24, label: 'Платформа' },
+  { kind: 'distortion', x: 12, y: 13, label: 'Искажение' },
+  { kind: 'distortion', x: 20, y: 13, label: 'Искажение' },
+  { kind: 'distortion', x: 13, y: 20, label: 'Искажение' },
+  { kind: 'distortion', x: 20, y: 20, label: 'Искажение' },
+  { kind: 'base', x: 15, y: 29, label: 'База игрока' },
+];
+const levelMapStorageKey = 'chrono-defense-completed-levels';
 
 const eras: Era[] = [
   {
@@ -171,9 +218,9 @@ const difficultyModes: Difficulty[] = [
   {
     id: 'easy',
     name: 'Легкая',
-    description: 'Для новичков: больше монет, больше жизней и спокойные первые волны.',
+    description: 'Для новичков: больше монет, больше HP базы и спокойные первые волны.',
     startCoins: 160,
-    startLives: 16,
+    startBaseHp: 150,
     hpMultiplier: 0.85,
     extraEnemies: 0,
   },
@@ -182,7 +229,7 @@ const difficultyModes: Difficulty[] = [
     name: 'Опытный режим',
     description: 'Для опытных искателей времени: честный баланс без лишней помощи.',
     startCoins: 120,
-    startLives: 12,
+    startBaseHp: 125,
     hpMultiplier: 1,
     extraEnemies: 0,
   },
@@ -191,7 +238,7 @@ const difficultyModes: Difficulty[] = [
     name: 'Сложный',
     description: 'Враги крепче, ошибок меньше, башни нужно ставить точнее.',
     startCoins: 100,
-    startLives: 9,
+    startBaseHp: 100,
     hpMultiplier: 1.22,
     extraEnemies: 1,
   },
@@ -200,7 +247,7 @@ const difficultyModes: Difficulty[] = [
     name: 'Антивремя',
     description: 'Самый сложный режим: поток времени злится, врагов больше, портал хрупкий.',
     startCoins: 85,
-    startLives: 6,
+    startBaseHp: 80,
     hpMultiplier: 1.45,
     extraEnemies: 2,
   },
@@ -217,6 +264,48 @@ function distanceBetweenCells(a: number, b: number) {
   const first = cellToPoint(a);
   const second = cellToPoint(b);
   return Math.hypot(first.x - second.x, first.y - second.y);
+}
+
+function distanceToSegment(point: LevelMapPoint, start: LevelMapPoint, end: LevelMapPoint) {
+  const segmentX = end.x - start.x;
+  const segmentY = end.y - start.y;
+  const segmentLength = segmentX * segmentX + segmentY * segmentY;
+
+  if (segmentLength === 0) return Math.hypot(point.x - start.x, point.y - start.y);
+
+  const progress = clamp(((point.x - start.x) * segmentX + (point.y - start.y) * segmentY) / segmentLength, 0, 1);
+  const projectionX = start.x + progress * segmentX;
+  const projectionY = start.y + progress * segmentY;
+
+  return Math.hypot(point.x - projectionX, point.y - projectionY);
+}
+
+function isLevelRouteCell(point: LevelMapPoint) {
+  return levelRouteSegments.some(([start, end]) => distanceToSegment(point, start, end) < 0.72);
+}
+
+function getLevelMapCellClass(cell: number) {
+  const point = {
+    x: (cell % levelMapSize) + 1,
+    y: Math.floor(cell / levelMapSize) + 1,
+  };
+
+  const distanceToRift = Math.hypot(point.x - levelRiftPoint.x, point.y - levelRiftPoint.y);
+
+  if (isLevelRouteCell(point)) return 'route';
+  if (distanceToRift < 5) return 'rift-land';
+  if ((point.x === 11 || point.x === 12) && point.y < 17) return 'river';
+  if (point.y >= 15 && point.y <= 17 && point.x < 29) return 'river';
+  if (point.x < 10 && point.y < 15) return point.x + point.y < 12 ? 'mountain' : 'forest';
+  if (point.x >= 11 && point.x <= 21 && point.y < 12) return 'sand';
+  if (point.x > 21 && point.y < 17) return point.y < 7 ? 'castle-land' : 'farm';
+  if (point.x < 11 && point.y > 17) return 'industrial-land';
+  if (point.x > 20 && point.y > 17) return 'future-land';
+  if (point.x >= 10 && point.x <= 22 && point.y > 20) return 'cyber-land';
+  if ((point.x + point.y) % 13 === 0) return 'forest';
+  if ((point.x - point.y) % 11 === 0) return 'hill';
+
+  return 'grass';
 }
 
 function getEnemyCell(enemy: Enemy) {
@@ -303,16 +392,37 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function readCompletedLevelIds() {
+  const savedLevels = window.localStorage.getItem(levelMapStorageKey);
+  if (!savedLevels) return [];
+
+  try {
+    const parsedLevels: unknown = JSON.parse(savedLevels);
+    if (!Array.isArray(parsedLevels)) return [];
+
+    return parsedLevels.filter((levelId): levelId is number =>
+      typeof levelId === 'number' && levelMap.some((level) => level.id === levelId),
+    );
+  } catch {
+    return [];
+  }
+}
+
 export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
-  const [screen, setScreen] = useState<GameScreen>('start');
+  const [screen, setScreen] = useState<GameScreen>('profile');
+  const [playerName, setPlayerName] = useState('');
+  const [playerAge, setPlayerAge] = useState('');
+  const [profileError, setProfileError] = useState('');
+  const [completedLevelIds, setCompletedLevelIds] = useState<number[]>(readCompletedLevelIds);
   const [selectedLevelId, setSelectedLevelId] = useState(1);
   const [difficulty, setDifficulty] = useState<Difficulty['id']>('easy');
   const selectedDifficultyData = difficultyModes.find((mode) => mode.id === difficulty) ?? difficultyModes[0];
   const [eraIndex, setEraIndex] = useState(0);
   const [wave, setWave] = useState(1);
   const [coins, setCoins] = useState(selectedDifficultyData.startCoins);
-  const [lives, setLives] = useState(selectedDifficultyData.startLives);
+  const [baseHp, setBaseHp] = useState(selectedDifficultyData.startBaseHp);
   const [selectedTower, setSelectedTower] = useState<TowerKind['id']>('arrow');
+  const [towerSlots, setTowerSlots] = useState<TowerSlot[]>(['arrow', 'slow', 'blast', null, null]);
   const [selectedTowerId, setSelectedTowerId] = useState<number | null>(null);
   const [towers, setTowers] = useState<Tower[]>([]);
   const [enemies, setEnemies] = useState<Enemy[]>([]);
@@ -337,12 +447,15 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
   const era = eras[eraIndex];
   const selectedTowerData = getTowerKind(selectedTower);
+  const equippedTowerIds = towerSlots.filter((slot): slot is TowerKind['id'] => slot !== null);
+  const isSelectedTowerEquipped = equippedTowerIds.includes(selectedTower);
   const selectedPlacedTower = towers.find((tower) => tower.id === selectedTowerId) ?? null;
   const selectedLevel = levelMap.find((level) => level.id === selectedLevelId) ?? levelMap[0];
   const enemiesInCurrentWave = 5 + wave * 2 + selectedDifficultyData.extraEnemies + (isBossWave(wave) ? 1 : 0);
   const waveElapsedSeconds = Math.max(0, getWaveDuration(wave) - waveTimeLeft);
   const skipSecondsLeft = Math.max(0, skipUnlockDelay - waveElapsedSeconds);
-  const canSkipWave = isWaveRunning && skipSecondsLeft === 0 && lives > 0 && !isVictory;
+  const canSkipWave = isWaveRunning && skipSecondsLeft === 0 && baseHp > 0 && !isVictory;
+  const playerLabel = playerName.trim() ? `${playerName.trim()}, ${playerAge} лет` : userEmail;
 
   const enemiesByCell = useMemo(() => {
     const map = new Map<number, Enemy[]>();
@@ -403,12 +516,12 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     if (!isWaveRunning) return;
 
     let spawned = 0;
-    const regularEnemies = 5 + wave * 2 + selectedDifficultyData.extraEnemies;
-    const spawnTimer = window.setInterval(() => {
-      spawned += 1;
-      const boss = isBossWave(wave) && spawned > regularEnemies;
-      const baseHp = boss ? 240 + wave * 55 : 55 + wave * 14;
-      const maxHp = Math.round(baseHp * selectedDifficultyData.hpMultiplier);
+      const regularEnemies = 5 + wave * 2 + selectedDifficultyData.extraEnemies;
+      const spawnTimer = window.setInterval(() => {
+        spawned += 1;
+        const boss = isBossWave(wave) && spawned > regularEnemies;
+        const enemyBaseHp = boss ? 240 + wave * 55 : 55 + wave * 14;
+        const maxHp = Math.round(enemyBaseHp * selectedDifficultyData.hpMultiplier);
 
       setSpawnedCount(spawned);
       setEnemies((current) => [
@@ -440,7 +553,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     const battleTimer = window.setInterval(() => {
       const now = Date.now();
       let coinsEarned = 0;
-      let escaped = 0;
+      let escapedDamage = 0;
       let nextTowers = towers;
 
       setEnemies((currentEnemies) => {
@@ -486,11 +599,19 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
             return false;
           }
           if (enemy.step >= pathCells.length - 1) {
-            escaped += enemy.isBoss ? 3 : 1;
+            escapedDamage += Math.max(1, Math.ceil(enemy.hp));
             return false;
           }
           return true;
         });
+
+        if (escapedDamage >= baseHp) {
+          setIsWaveRunning(false);
+          setWaveTimeLeft(0);
+          setBaseHp(0);
+          setMessage(`База получила ${escapedDamage} урона и разрушилась.`);
+          return aliveEnemies;
+        }
 
         if (aliveEnemies.length === 0 && spawnedCount >= enemiesInCurrentWave) {
           setIsWaveRunning(false);
@@ -514,8 +635,9 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           setCoins((current) => current + coinsEarned);
         }
 
-        if (escaped > 0) {
-          setLives((current) => Math.max(0, current - escaped));
+        if (escapedDamage > 0) {
+          setBaseHp((current) => Math.max(0, current - escapedDamage));
+          setMessage(`База получила ${escapedDamage} урона от прорвавшихся врагов.`);
         }
 
         return aliveEnemies;
@@ -525,14 +647,90 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     }, 650);
 
     return () => window.clearInterval(battleTimer);
-  }, [enemiesInCurrentWave, isWaveRunning, spawnedCount, towers, wave]);
+  }, [baseHp, enemiesInCurrentWave, isWaveRunning, spawnedCount, towers, wave]);
 
   useEffect(() => {
-    if (lives === 0) {
+    window.localStorage.setItem(levelMapStorageKey, JSON.stringify(completedLevelIds));
+  }, [completedLevelIds]);
+
+  useEffect(() => {
+    if (!isVictory) return;
+
+    setCompletedLevelIds((current) =>
+      current.includes(selectedLevelId) ? current : [...current, selectedLevelId],
+    );
+  }, [isVictory, selectedLevelId]);
+
+  useEffect(() => {
+    if (baseHp === 0) {
       setIsWaveRunning(false);
-      setMessage('Портал разрушен. Нажми "Заново" и попробуй другую расстановку.');
+      setMessage('HP базы закончилось. Нажми "Заново" и попробуй другую расстановку.');
     }
-  }, [lives]);
+  }, [baseHp]);
+
+  function submitPlayerProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const cleanName = playerName.trim();
+    const age = Number(playerAge);
+
+    if (cleanName.length < 2) {
+      setProfileError('Введи имя минимум из 2 букв.');
+      return;
+    }
+
+    if (!Number.isInteger(age) || age < 6 || age > 99) {
+      setProfileError('Введи возраст от 6 до 99.');
+      return;
+    }
+
+    setPlayerName(cleanName);
+    setPlayerAge(String(age));
+    setProfileError('');
+    setScreen('start');
+  }
+
+  function addTowerToSlot(kind: TowerKind['id']) {
+    if (isWaveRunning) return;
+
+    if (towerSlots.includes(kind)) {
+      setSelectedTower(kind);
+      setMessage(`${getTowerKind(kind).name} уже есть в слотах.`);
+      return;
+    }
+
+    const emptySlotIndex = towerSlots.findIndex((slot) => slot === null);
+    if (emptySlotIndex === -1) {
+      setMessage('Все 5 слотов заняты. Убери башню из слота, чтобы добавить новую.');
+      return;
+    }
+
+    setTowerSlots((current) => current.map((slot, index) => (index === emptySlotIndex ? kind : slot)));
+    setSelectedTower(kind);
+    setMessage(`${getTowerKind(kind).name} добавлен в слот ${emptySlotIndex + 1}.`);
+  }
+
+  function removeTowerFromSlot(slotIndex: number) {
+    if (isWaveRunning) return;
+
+    const removedTower = towerSlots[slotIndex];
+    if (!removedTower) return;
+
+    const nextSlots = towerSlots.map((slot, index) => (index === slotIndex ? null : slot));
+    const nextSelectedTower = nextSlots.find((slot): slot is TowerKind['id'] => slot !== null);
+
+    setTowerSlots(nextSlots);
+    if (removedTower === selectedTower && nextSelectedTower) {
+      setSelectedTower(nextSelectedTower);
+    }
+    setMessage(`${getTowerKind(removedTower).name} убран из слота ${slotIndex + 1}.`);
+  }
+
+  function selectTowerFromSlot(kind: TowerKind['id'] | null) {
+    if (!kind || isWaveRunning) return;
+    setSelectedTower(kind);
+    setSelectedTowerId(null);
+  }
 
   function handleCellClick(cell: number) {
     if (ignoreNextBoardClickRef.current) {
@@ -550,6 +748,11 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     }
 
     if (!buildCells.includes(cell) || isWaveRunning) return;
+    if (!isSelectedTowerEquipped) {
+      setMessage('Сначала добавь башню в один из 5 слотов.');
+      return;
+    }
+
     if (coins < selectedTowerData.cost) {
       setMessage('Не хватает монет для этой башни.');
       return;
@@ -613,7 +816,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     setEraIndex(0);
     setWave(startWaveNumber);
     setCoins(mode.startCoins);
-    setLives(mode.startLives);
+    setBaseHp(mode.startBaseHp);
     setIsVictory(false);
     setSelectedTowerId(null);
     setTowers([]);
@@ -639,7 +842,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   }
 
   function startWave() {
-    if (isWaveRunning || lives === 0 || isVictory || wave > maxWaves) return;
+    if (isWaveRunning || baseHp === 0 || isVictory || wave > maxWaves) return;
     setSelectedTowerId(null);
     setEnemies([]);
     setSpawnedCount(0);
@@ -685,6 +888,18 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     setMessage(`Новая временная линия готова. Сложность: ${selectedDifficultyData.name}.`);
   }
 
+  function goToStartMenu() {
+    if (isWaveRunning) return;
+    setSelectedTowerId(null);
+    setScreen('start');
+  }
+
+  function goToDifficultyMenu() {
+    if (isWaveRunning) return;
+    setSelectedTowerId(null);
+    setScreen('difficulty');
+  }
+
   function startCameraDrag(event: PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
 
@@ -728,7 +943,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     <section className="game-shell" style={{ '--era': era.accent } as CSSProperties}>
       <div className="game-top">
         <div>
-          <p className="hello">Игрок: {userEmail}</p>
+          <p className="hello">Игрок: {playerLabel}</p>
           <h2>Chrono Defense</h2>
           <p className="era-line">
             {screen === 'battle' ? `${era.name} · ${era.year}` : selectedLevel.title}
@@ -739,10 +954,44 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
             <span>Волна {wave}/{maxWaves}</span>
             <span>{waveTimeLeft} сек</span>
             <span>{coins} монет</span>
-            <span>{lives} жизней</span>
+            <span>{baseHp} HP базы</span>
           </div>
         )}
       </div>
+
+      {screen === 'profile' && (
+        <section className="profile-screen">
+          <div className="screen-heading">
+            <h3>Перед началом</h3>
+            <p>Введи имя и возраст игрока, чтобы начать защиту линии времени.</p>
+          </div>
+          <form className="player-form" onSubmit={submitPlayerProfile}>
+            <label>
+              Имя
+              <input
+                type="text"
+                value={playerName}
+                onChange={(event) => setPlayerName(event.target.value)}
+                placeholder="Например, Алишер"
+                autoComplete="given-name"
+              />
+            </label>
+            <label>
+              Возраст
+              <input
+                type="number"
+                value={playerAge}
+                onChange={(event) => setPlayerAge(event.target.value)}
+                placeholder="14"
+                min="6"
+                max="99"
+              />
+            </label>
+            {profileError && <p className="form-error">{profileError}</p>}
+            <button type="submit">Начать</button>
+          </form>
+        </section>
+      )}
 
       {screen === 'start' && (
         <section className="menu-screen">
@@ -767,20 +1016,92 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
             <h3>Карта уровней</h3>
             <p>Игрок проходит уровни по порядку, но сейчас можно выбрать любой уровень для теста.</p>
           </div>
-          <div className="level-map">
-            {levelMap.map((level) => (
-              <button
-                key={level.id}
-                className={selectedLevelId === level.id ? 'level-node active' : 'level-node'}
-                type="button"
-                onClick={() => selectLevel(level)}
-              >
-                <small>{level.chapter}</small>
-                <strong>{level.id}. {level.title}</strong>
-                <span>Старт с волны {level.startWave}</span>
-                <em>{level.description}</em>
-              </button>
-            ))}
+          <div className="level-map-layout">
+            <div className="level-map-card">
+              <div className="map-axis map-axis-top" aria-hidden="true">
+                {Array.from({ length: levelMapSize }, (_, index) => (
+                  <span key={index}>{index + 1}</span>
+                ))}
+              </div>
+              <div className="map-axis map-axis-left" aria-hidden="true">
+                {Array.from({ length: levelMapSize }, (_, index) => (
+                  <span key={index}>{index + 1}</span>
+                ))}
+              </div>
+              <div className="level-map" aria-label="Карта уровней 30 на 30">
+                {Array.from({ length: levelMapSize * levelMapSize }, (_, cell) => (
+                  <span
+                    key={cell}
+                    className={`map-cell ${getLevelMapCellClass(cell)}`}
+                    aria-hidden="true"
+                  />
+                ))}
+                <span className="map-rift" aria-hidden="true">Разлом времени</span>
+                {mapDecorations.map((decoration) => (
+                  <span
+                    key={`${decoration.kind}-${decoration.x}-${decoration.y}`}
+                    className={`map-decoration ${decoration.kind}`}
+                    style={{
+                      gridColumn: `${decoration.x} / span 2`,
+                      gridRow: `${decoration.y} / span 2`,
+                    }}
+                    title={decoration.label}
+                    aria-hidden="true"
+                  />
+                ))}
+                {levelMap.map((level) => {
+                  const position = levelMapPositions[level.id];
+                  const isCompleted = completedLevelIds.includes(level.id);
+
+                  return (
+                    <span
+                      key={`region-${level.id}`}
+                      className={`map-region ${level.mapArea} ${isCompleted ? 'completed' : 'locked'}`}
+                      style={{
+                        gridColumn: `${Math.max(1, position.x - 2)} / span 9`,
+                        gridRow: `${Math.max(1, position.y - 3)} / span 8`,
+                      }}
+                      aria-hidden="true"
+                    />
+                  );
+                })}
+                {levelMap.map((level) => {
+                  const position = levelMapPositions[level.id];
+                  const isCompleted = completedLevelIds.includes(level.id);
+
+                  return (
+                    <button
+                      key={level.id}
+                      className={[
+                        'level-node',
+                        level.mapArea,
+                        selectedLevelId === level.id ? 'active' : '',
+                        isCompleted ? 'completed' : 'locked',
+                      ].join(' ')}
+                      type="button"
+                      onClick={() => selectLevel(level)}
+                      style={{
+                        gridColumn: `${position.x} / span 5`,
+                        gridRow: `${position.y} / span 4`,
+                      }}
+                    >
+                      <span className="level-number">{level.id}</span>
+                      <small>{isCompleted ? 'Открыто' : 'Не пройдено'}</small>
+                      <strong>{level.mapTitle}</strong>
+                      <em>{level.description}</em>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <aside className="map-legend" aria-label="Легенда карты">
+              <strong>Легенда</strong>
+              <span><i className="legend-road" />Дорога врагов</span>
+              <span><i className="legend-platform" />Платформа для башни</span>
+              <span><i className="legend-rift-small" />Искажение времени</span>
+              <span><i className="legend-rift" />Разлом времени</span>
+              <span><i className="legend-base" />База игрока</span>
+            </aside>
           </div>
           <div className="menu-actions">
             <button className="ghost" type="button" onClick={() => setScreen('start')}>
@@ -823,7 +1144,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
             <strong>{mode.name}</strong>
             <span>{mode.description}</span>
             <small>
-              {mode.startCoins} монет · {mode.startLives} жизней
+              {mode.startCoins} монет · {mode.startBaseHp} HP базы
             </small>
           </button>
         ))}
@@ -838,24 +1159,8 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
       {screen === 'battle' && (
         <>
-      <div className="tower-bar" aria-label="Выбор башни">
-        {towerKinds.map((tower) => (
-          <button
-            key={tower.id}
-            className={selectedTower === tower.id ? 'tower-choice active' : 'tower-choice'}
-            type="button"
-            onClick={() => setSelectedTower(tower.id)}
-            disabled={isWaveRunning}
-          >
-            <span>{tower.icon}</span>
-            <strong>{tower.name}</strong>
-            <small>
-              {tower.cost} монет · удар {getAttackSeconds(tower.cooldown)}с · DPS {getDps(tower.damage, tower.cooldown)}
-            </small>
-          </button>
-        ))}
-      </div>
-
+      <div className="battle-layout">
+        <div className="battle-side-panel">
       {selectedPlacedTower && (
         <div className="upgrade-panel">
           <div>
@@ -904,6 +1209,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           </div>
         </div>
       )}
+        </div>
 
       <div
         ref={boardRef}
@@ -991,20 +1297,90 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           );
         })}
       </div>
+      </div>
 
-      <div className="actions">
-        <button type="button" onClick={startWave} disabled={isWaveRunning || lives === 0 || isVictory}>
-          {isVictory ? 'Победа' : isWaveRunning ? 'Волна идет' : 'Запустить волну'}
-        </button>
-        <button className="secondary" type="button" onClick={skipWave} disabled={!canSkipWave}>
-          {isWaveRunning && skipSecondsLeft > 0 ? `Скип через ${skipSecondsLeft}с` : 'Скип волны'}
-        </button>
-        <button className="ghost" type="button" onClick={restartGame}>
-          Заново
-        </button>
-        <button className="ghost" type="button" onClick={() => setScreen('levels')} disabled={isWaveRunning}>
-          Карта уровней
-        </button>
+      <div className="battle-dock">
+        <div className="tower-inventory" aria-label="Бестиарий времени">
+          <strong>Бестиарий времени</strong>
+          <div className="bestiary-list">
+            {towerKinds.map((tower) => (
+              <button
+                key={tower.id}
+                className={towerSlots.includes(tower.id) ? 'bestiary-item equipped' : 'bestiary-item'}
+                type="button"
+                onClick={() => addTowerToSlot(tower.id)}
+                disabled={isWaveRunning}
+                title={tower.levelDescriptions[0]}
+              >
+                <span>{tower.icon}</span>
+                <em>{tower.name}</em>
+                <small>{tower.cost} монет</small>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="tower-bar" aria-label="5 слотов башен">
+          {towerSlots.map((slot, slotIndex) => {
+            const tower = slot ? getTowerKind(slot) : null;
+
+            return (
+              <div
+                className={[
+                  'tower-slot',
+                  tower ? 'filled' : 'empty',
+                  tower && selectedTower === tower.id ? 'active' : '',
+                ].join(' ')}
+                key={`${slot ?? 'empty'}-${slotIndex}`}
+              >
+                <button
+                  className="tower-choice"
+                  type="button"
+                  onClick={() => selectTowerFromSlot(slot)}
+                  disabled={!tower || isWaveRunning}
+                >
+                  <span>{tower?.icon ?? '+'}</span>
+                  <strong>{tower?.name ?? 'Пусто'}</strong>
+                  <small>
+                    {tower ? `${tower.cost} монет · DPS ${getDps(tower.damage, tower.cooldown)}` : 'Добавь из бестиария'}
+                  </small>
+                </button>
+                {tower && (
+                  <button
+                    className="slot-remove"
+                    type="button"
+                    onClick={() => removeTowerFromSlot(slotIndex)}
+                    disabled={isWaveRunning}
+                    aria-label={`Убрать ${tower.name} из слота`}
+                  >
+                    x
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="actions">
+          <button type="button" onClick={startWave} disabled={isWaveRunning || baseHp === 0 || isVictory}>
+            {isVictory ? 'Победа' : isWaveRunning ? 'Волна идет' : 'Запустить'}
+          </button>
+          <button className="secondary" type="button" onClick={skipWave} disabled={!canSkipWave}>
+            {isWaveRunning && skipSecondsLeft > 0 ? `${skipSecondsLeft}с` : 'Скип'}
+          </button>
+          <button className="ghost" type="button" onClick={restartGame}>
+            Заново
+          </button>
+          <button className="ghost" type="button" onClick={goToStartMenu} disabled={isWaveRunning}>
+            Меню
+          </button>
+          <button className="ghost" type="button" onClick={goToDifficultyMenu} disabled={isWaveRunning}>
+            Сложность
+          </button>
+          <button className="ghost" type="button" onClick={() => setScreen('levels')} disabled={isWaveRunning}>
+            Карта
+          </button>
+        </div>
       </div>
 
       <p className="message">{message}</p>
