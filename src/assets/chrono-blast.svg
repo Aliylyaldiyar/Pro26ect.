@@ -1,0 +1,65 @@
+<svg width="220" height="220" viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="shadow" x="-30%" y="-20%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="8" stdDeviation="5" flood-color="#071517" flood-opacity="0.28"/>
+    </filter>
+    <radialGradient id="aura" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(111 105) rotate(90) scale(88)">
+      <stop stop-color="#f5fffb" stop-opacity="0.95"/>
+      <stop offset="0.32" stop-color="#75e6df" stop-opacity="0.72"/>
+      <stop offset="0.7" stop-color="#3d88a5" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#3d88a5" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="robe" x1="75" y1="51" x2="140" y2="179" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#263540"/>
+      <stop offset="0.56" stop-color="#19262e"/>
+      <stop offset="1" stop-color="#0f171d"/>
+    </linearGradient>
+    <linearGradient id="tealGold" x1="59" y1="61" x2="159" y2="158" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#e6fff8"/>
+      <stop offset="0.38" stop-color="#67d8cf"/>
+      <stop offset="1" stop-color="#9b7138"/>
+    </linearGradient>
+    <linearGradient id="skin" x1="87" y1="53" x2="124" y2="104" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#efd2bd"/>
+      <stop offset="1" stop-color="#b98973"/>
+    </linearGradient>
+  </defs>
+
+  <ellipse cx="111" cy="190" rx="62" ry="13" fill="#071517" opacity="0.27"/>
+  <circle cx="110" cy="104" r="84" fill="url(#aura)" opacity="0.9"/>
+  <circle cx="110" cy="104" r="62" stroke="#77e7df" stroke-width="3" stroke-dasharray="13 9" opacity="0.72"/>
+  <circle cx="110" cy="104" r="45" stroke="#f3d999" stroke-width="2" stroke-dasharray="4 8" opacity="0.72"/>
+  <path d="M110 31V48M110 160V179M37 104H56M164 104H184M58 52L71 65M151 143L165 157M164 51L151 65M70 143L57 157" stroke="#d9fff8" stroke-width="4" stroke-linecap="round" opacity="0.78"/>
+
+  <g filter="url(#shadow)">
+    <path d="M78 89C89 74 126 72 141 91L155 158H65L78 89Z" fill="url(#robe)" stroke="#63d8d0" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M87 103L69 145H93L109 111L87 103Z" fill="#152027" stroke="#c39b5d" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M133 103L151 145H127L111 111L133 103Z" fill="#152027" stroke="#c39b5d" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M83 158L74 187H95L104 158H83Z" fill="#10191f" stroke="#071013" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M126 158L135 187H114L106 158H126Z" fill="#10191f" stroke="#071013" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M70 185H96L91 199H61C63 191 66 187 70 185Z" fill="#071013"/>
+    <path d="M124 185H150L159 199H128C124 195 123 190 124 185Z" fill="#071013"/>
+
+    <path d="M85 64C84 43 99 30 116 34C132 38 141 55 137 75C126 87 98 86 85 64Z" fill="#202832" stroke="#071013" stroke-width="5"/>
+    <path d="M91 69C102 80 121 80 134 72L129 99C116 110 95 107 87 92L91 69Z" fill="url(#skin)" stroke="#0b1115" stroke-width="4"/>
+    <path d="M80 60C97 46 124 45 143 55L137 76C119 80 98 79 80 70V60Z" fill="#17242b" stroke="#071013" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M87 59C101 65 123 65 141 55" stroke="#68ddd5" stroke-width="4" stroke-linecap="round"/>
+    <path d="M97 83H130" stroke="#071013" stroke-width="9" stroke-linecap="round"/>
+
+    <circle cx="110" cy="117" r="25" fill="#13262d" stroke="url(#tealGold)" stroke-width="5"/>
+    <circle cx="110" cy="117" r="13" fill="#dffef7" stroke="#64d8d0" stroke-width="4"/>
+    <path d="M110 96V117L124 127" stroke="#fff3bf" stroke-width="4" stroke-linecap="round"/>
+    <path d="M91 118H129M110 99V135" stroke="#71e6df" stroke-width="2" stroke-linecap="round" opacity="0.65"/>
+
+    <circle cx="62" cy="144" r="18" fill="#13242b" stroke="#6ee3da" stroke-width="4"/>
+    <circle cx="62" cy="144" r="9" fill="#e8fff9" stroke="#c39b5d" stroke-width="3"/>
+    <path d="M62 133V145L70 150" stroke="#1c555e" stroke-width="3" stroke-linecap="round"/>
+
+    <circle cx="158" cy="144" r="18" fill="#13242b" stroke="#6ee3da" stroke-width="4"/>
+    <path d="M148 144H168M158 134V154" stroke="#e8fff9" stroke-width="4" stroke-linecap="round"/>
+    <path d="M148 134L168 154M168 134L148 154" stroke="#f3d999" stroke-width="2" stroke-linecap="round" opacity="0.88"/>
+
+    <path d="M82 94C101 104 121 104 140 94" stroke="#f3d999" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+    <path d="M77 119C94 130 126 130 143 119" stroke="#5dd7d1" stroke-width="3" stroke-linecap="round" opacity="0.72"/>
+  </g>
+</svg>

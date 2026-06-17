@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, FormEvent, PointerEvent } from 'react';
+import chronoBlastSprite from '../assets/chrono-blast.svg';
+import temporalSniperSprite from '../assets/temporal-sniper.svg';
+import timeScoutSprite from '../assets/time-scout.svg';
 
 type Era = {
   name: string;
@@ -15,10 +18,12 @@ type TowerKind = {
   id: 'arrow' | 'slow' | 'blast';
   name: string;
   icon: string;
+  sprite?: string;
   cost: number;
   damage: number;
   range: number;
   cooldown: number;
+  elevatedOnly?: boolean;
   levelDescriptions: [string, string, string];
 };
 
@@ -35,7 +40,7 @@ type Difficulty = {
   extraEnemies: number;
 };
 
-type GameScreen = 'profile' | 'start' | 'levels' | 'difficulty' | 'battle';
+type GameScreen = 'profile' | 'start' | 'levels' | 'difficulty' | 'loadout' | 'battle';
 
 type LevelMapItem = {
   id: number;
@@ -86,8 +91,10 @@ const maxTowerLevel = 3;
 const maxWaves = 40;
 const baseWaveDuration = 30;
 const skipUnlockDelay = 25;
+const requiredLoadoutSize = 3;
 const pathCells = [0, 1, 2, 3, 13, 23, 33, 34, 35, 45, 55, 65, 64, 63, 73, 83, 84, 85, 86, 96, 97, 98, 99];
 const buildCells = [11, 12, 14, 21, 22, 24, 31, 32, 36, 37, 42, 43, 44, 46, 47, 54, 56, 57, 62, 66, 67, 72, 74, 75, 82, 87, 88, 92, 93, 94, 95];
+const highlandCells = [12, 24, 36, 47, 62, 74, 88, 94];
 
 const levelMap: LevelMapItem[] = [
   { id: 1, title: 'Искра времени', mapTitle: 'Каменный век', mapArea: 'stone', chapter: 'Обучение', startWave: 1, description: 'Первые башни и спокойные враги.' },
@@ -174,18 +181,24 @@ const eras: Era[] = [
 const towerKinds: TowerKind[] = [
   {
     id: 'arrow',
-    name: 'Стрелок',
-    icon: 'A',
+    name: 'Скаут времени',
+    icon: 'S',
+    sprite: timeScoutSprite,
     cost: 35,
     damage: 18,
     range: 1.8,
     cooldown: 850,
-    levelDescriptions: ['Старый лук: быстрые простые выстрелы.', 'Новый лук: больше урона и точнее прицел.', 'Мастер-лучник: серия мощных выстрелов по линии.'],
+    levelDescriptions: [
+      'Скаут с карманными часами: быстрый точный удар по линии времени.',
+      'Усиленный хронометр: больше урона и ярче импульс атаки.',
+      'Разведчик разлома: серия мощных хроно-ударов по первой цели.',
+    ],
   },
   {
     id: 'slow',
-    name: 'Хроно',
+    name: 'Хроно-бласт',
     icon: 'C',
+    sprite: chronoBlastSprite,
     cost: 55,
     damage: 8,
     range: 2.1,
@@ -198,12 +211,14 @@ const towerKinds: TowerKind[] = [
   },
   {
     id: 'blast',
-    name: 'Пушка',
+    name: 'Временной снайпер',
     icon: 'B',
+    sprite: temporalSniperSprite,
     cost: 80,
     damage: 38,
     range: 1.5,
     cooldown: 1450,
+    elevatedOnly: true,
     levelDescriptions: ['Пороховой заряд: тяжелый одиночный удар.', 'Усиленное ядро: взрыв бьет заметно больнее.', 'Осадная машина: максимальный урон по крепким целям.'],
   },
 ];
@@ -316,6 +331,7 @@ function getTileDetailClass(cell: number) {
   if (cell === pathCells[0]) return 'start-gate';
   if (cell === pathCells[pathCells.length - 1]) return 'time-portal';
   if (pathCells.includes(cell)) return cell % 2 === 0 ? 'path-stones' : 'path-dust';
+  if (highlandCells.includes(cell)) return 'build-highland';
   if (buildCells.includes(cell)) return cell % 3 === 0 ? 'build-plate' : 'build-grass';
   if (cell % 11 === 0 || cell % 17 === 0) return 'terrain-rocks';
   if (cell % 7 === 0) return 'terrain-flowers';
@@ -368,6 +384,17 @@ function getLandscapeRefund(towers: Tower[]) {
 
 function getTargetPriorityName(priority: TargetPriority) {
   return targetPriorityOptions.find((option) => option.id === priority)?.name ?? targetPriorityOptions[0].name;
+}
+
+function getPlacementLabel(tower: TowerKind) {
+  return tower.elevatedOnly ? 'только возвышенность' : 'земля';
+}
+
+function renderTowerMark(tower: TowerKind | null, fallback = '+') {
+  if (!tower) return fallback;
+  if (!tower.sprite) return tower.icon;
+
+  return <img className="tower-kind-sprite" src={tower.sprite} alt="" draggable={false} />;
 }
 
 function chooseTowerTarget(tower: Tower, enemies: Enemy[], range: number) {
@@ -449,6 +476,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   const selectedTowerData = getTowerKind(selectedTower);
   const equippedTowerIds = towerSlots.filter((slot): slot is TowerKind['id'] => slot !== null);
   const isSelectedTowerEquipped = equippedTowerIds.includes(selectedTower);
+  const isLoadoutReady = equippedTowerIds.length >= Math.min(requiredLoadoutSize, towerKinds.length);
   const selectedPlacedTower = towers.find((tower) => tower.id === selectedTowerId) ?? null;
   const selectedLevel = levelMap.find((level) => level.id === selectedLevelId) ?? levelMap[0];
   const enemiesInCurrentWave = 5 + wave * 2 + selectedDifficultyData.extraEnemies + (isBossWave(wave) ? 1 : 0);
@@ -748,8 +776,19 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     }
 
     if (!buildCells.includes(cell) || isWaveRunning) return;
+    const isHighlandCell = highlandCells.includes(cell);
     if (!isSelectedTowerEquipped) {
       setMessage('Сначала добавь башню в один из 5 слотов.');
+      return;
+    }
+
+    if (selectedTowerData.elevatedOnly && !isHighlandCell) {
+      setMessage(`${selectedTowerData.name} ставится только на возвышенности.`);
+      return;
+    }
+
+    if (!selectedTowerData.elevatedOnly && isHighlandCell) {
+      setMessage('Эта возвышенность подходит только для башен со статусом "только возвышенность".');
       return;
     }
 
@@ -830,8 +869,19 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     if (isWaveRunning) return;
     setDifficulty(mode.id);
     resetGame(mode, selectedLevel.startWave);
+    setTowerSlots([null, null, null, null, null]);
+    setScreen('loadout');
+    setMessage(`${selectedLevel.title}. ${mode.name}: собери набор башен перед входом в бой.`);
+  }
+
+  function beginBattleAfterLoadout() {
+    if (!isLoadoutReady) {
+      setMessage(`Выбери минимум ${Math.min(requiredLoadoutSize, towerKinds.length)} башни в Бестиарии.`);
+      return;
+    }
+
     setScreen('battle');
-    setMessage(`${selectedLevel.title}. ${mode.name}: ${mode.description}`);
+    setMessage(`${selectedLevel.title}. ${selectedDifficultyData.name}: расставь башни и запускай волну.`);
   }
 
   function selectLevel(level: LevelMapItem) {
@@ -843,6 +893,11 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
   function startWave() {
     if (isWaveRunning || baseHp === 0 || isVictory || wave > maxWaves) return;
+    if (!isLoadoutReady) {
+      setScreen('loadout');
+      setMessage(`Сначала собери набор: минимум ${Math.min(requiredLoadoutSize, towerKinds.length)} башни.`);
+      return;
+    }
     setSelectedTowerId(null);
     setEnemies([]);
     setSpawnedCount(0);
@@ -941,6 +996,15 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
   return (
     <section className="game-shell" style={{ '--era': era.accent } as CSSProperties}>
+      <div className="time-atmosphere" aria-hidden="true">
+        <span className="broken-clock shell-clock-main" />
+        <span className="broken-clock shell-clock-small" />
+        <span className="time-crack shell-crack-a" />
+        <span className="time-crack shell-crack-b" />
+        <span className="time-shard shell-shard-a" />
+        <span className="time-shard shell-shard-b" />
+        <span className="time-shard shell-shard-c" />
+      </div>
       <div className="game-top">
         <div>
           <p className="hello">Игрок: {playerLabel}</p>
@@ -961,6 +1025,8 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
       {screen === 'profile' && (
         <section className="profile-screen">
+          <span className="broken-clock screen-clock profile-clock" aria-hidden="true" />
+          <span className="time-crack screen-crack profile-crack" aria-hidden="true" />
           <div className="screen-heading">
             <h3>Перед началом</h3>
             <p>Введи имя и возраст игрока, чтобы начать защиту линии времени.</p>
@@ -995,6 +1061,8 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
       {screen === 'start' && (
         <section className="menu-screen">
+          <span className="broken-clock screen-clock menu-clock" aria-hidden="true" />
+          <span className="time-crack screen-crack menu-crack" aria-hidden="true" />
           <div>
             <h3>Начальный экран</h3>
             <p>Выбери старт, чтобы перейти к карте уровней. Настройки камеры уже доступны в бою: мышь крутит карту, колесико меняет масштаб.</p>
@@ -1012,6 +1080,8 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
       {screen === 'levels' && (
         <section className="level-screen">
+          <span className="broken-clock screen-clock level-clock" aria-hidden="true" />
+          <span className="time-shard level-shard" aria-hidden="true" />
           <div className="screen-heading">
             <h3>Карта уровней</h3>
             <p>Игрок проходит уровни по порядку, но сейчас можно выбрать любой уровень для теста.</p>
@@ -1029,6 +1099,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                 ))}
               </div>
               <div className="level-map" aria-label="Карта уровней 30 на 30">
+                <span className="map-clock-fracture" aria-hidden="true" />
                 {Array.from({ length: levelMapSize * levelMapSize }, (_, cell) => (
                   <span
                     key={cell}
@@ -1113,6 +1184,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
       {screen === 'battle' && (
         <div className="era-panel">
+        <span className="broken-clock era-clock" aria-hidden="true" />
         <div className={`era-preview ${era.ground}`}>
           <span>{era.tower}</span>
         </div>
@@ -1128,6 +1200,8 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
       {screen === 'difficulty' && (
         <section className="difficulty-screen">
+          <span className="broken-clock screen-clock difficulty-clock" aria-hidden="true" />
+          <span className="time-crack screen-crack difficulty-crack" aria-hidden="true" />
           <div className="screen-heading">
             <h3>Выбор сложности</h3>
             <p>{selectedLevel.title}: старт с волны {selectedLevel.startWave}. После выбора сложности откроется карта битвы.</p>
@@ -1152,6 +1226,98 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           <div className="menu-actions">
             <button className="ghost" type="button" onClick={() => setScreen('levels')}>
               Назад к уровням
+            </button>
+          </div>
+        </section>
+      )}
+
+      {screen === 'loadout' && (
+        <section className="loadout-screen">
+          <span className="broken-clock screen-clock loadout-clock" aria-hidden="true" />
+          <span className="time-crack screen-crack loadout-crack" aria-hidden="true" />
+          <div className="screen-heading">
+            <h3>Собери Бестиарий</h3>
+            <p>
+              Выбери минимум {Math.min(requiredLoadoutSize, towerKinds.length)} башни для уровня {selectedLevel.title}. После этого откроется поле битвы.
+            </p>
+          </div>
+
+          <div className="loadout-layout">
+            <div className="loadout-bestiary" aria-label="Бестиарий времени">
+              <div className="loadout-panel-heading">
+                <strong>Бестиарий</strong>
+                <span>{equippedTowerIds.length}/{Math.min(requiredLoadoutSize, towerKinds.length)} выбрано</span>
+              </div>
+              <div className="bestiary-list loadout-bestiary-list">
+                {towerKinds.map((tower) => (
+                  <button
+                    key={tower.id}
+                    className={towerSlots.includes(tower.id) ? 'bestiary-item equipped' : 'bestiary-item'}
+                    type="button"
+                    onClick={() => addTowerToSlot(tower.id)}
+                    title={tower.levelDescriptions[0]}
+                  >
+                    <span>{renderTowerMark(tower)}</span>
+                    <em>{tower.name}</em>
+                    <small>{tower.cost} монет · DPS {getDps(tower.damage, tower.cooldown)} · {getPlacementLabel(tower)}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="loadout-slots" aria-label="Слоты башен">
+              <div className="loadout-panel-heading">
+                <strong>Набор на бой</strong>
+                <span>{isLoadoutReady ? 'готов' : 'нужны башни'}</span>
+              </div>
+              <div className="tower-bar loadout-tower-bar">
+                {towerSlots.map((slot, slotIndex) => {
+                  const tower = slot ? getTowerKind(slot) : null;
+
+                  return (
+                    <div
+                      className={[
+                        'tower-slot',
+                        tower ? 'filled' : 'empty',
+                        tower && selectedTower === tower.id ? 'active' : '',
+                      ].join(' ')}
+                      key={`${slot ?? 'empty'}-${slotIndex}`}
+                    >
+                      <button
+                        className="tower-choice"
+                        type="button"
+                        onClick={() => selectTowerFromSlot(slot)}
+                        disabled={!tower}
+                      >
+                        <span>{renderTowerMark(tower)}</span>
+                        <strong>{tower?.name ?? 'Пусто'}</strong>
+                        <small>
+                          {tower ? `${tower.cost} монет · ${getPlacementLabel(tower)}` : 'Добавь из Бестиария'}
+                        </small>
+                      </button>
+                      {tower && (
+                        <button
+                          className="slot-remove"
+                          type="button"
+                          onClick={() => removeTowerFromSlot(slotIndex)}
+                          aria-label={`Убрать ${tower.name} из слота`}
+                        >
+                          x
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="menu-actions loadout-actions">
+            <button className="ghost" type="button" onClick={() => setScreen('difficulty')}>
+              Назад к сложности
+            </button>
+            <button type="button" onClick={beginBattleAfterLoadout} disabled={!isLoadoutReady}>
+              В бой
             </button>
           </div>
         </section>
@@ -1229,6 +1395,9 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
         onPointerCancel={stopCameraDrag}
         aria-label="Поле tower defence"
       >
+        <span className="board-clock-ruin" aria-hidden="true" />
+        <span className="board-clock-hand hand-a" aria-hidden="true" />
+        <span className="board-clock-hand hand-b" aria-hidden="true" />
         {Array.from({ length: boardSize * boardSize }, (_, cell) => {
           const tower = towers.find((item) => item.cell === cell);
           const towerKind = getTowerKind(tower?.kind ?? selectedTower);
@@ -1237,6 +1406,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           const hitTower = towers.find((item) => item.lastTargetCell === cell && item.attackCount > 0);
           const isPath = pathCells.includes(cell);
           const canBuild = buildCells.includes(cell);
+          const isHighland = highlandCells.includes(cell);
           const isSelectedTower = tower?.id === selectedTowerId;
 
           return (
@@ -1246,6 +1416,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                 'tile',
                 isPath ? 'path' : '',
                 canBuild ? 'build' : '',
+                isHighland ? 'highland' : '',
                 getTileDetailClass(cell),
                 tower ? 'has-tower' : '',
                 isSelectedTower ? 'selected-tower' : '',
@@ -1263,8 +1434,8 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                 />
               )}
               {tower && (
-                <span key={`${tower.id}-${tower.attackCount}`} className={`tower level-${tower.level} attacking`}>
-                  {towerKind.icon}
+                <span key={`${tower.id}-${tower.attackCount}`} className={`tower tower-${tower.kind} level-${tower.level} attacking`}>
+                  {renderTowerMark(towerKind)}
                   <small className="tower-level">{tower.level}</small>
                 </span>
               )}
@@ -1300,6 +1471,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
       </div>
 
       <div className="battle-dock">
+        <span className="dock-clock-fragment" aria-hidden="true" />
         <div className="tower-inventory" aria-label="Бестиарий времени">
           <strong>Бестиарий времени</strong>
           <div className="bestiary-list">
@@ -1312,9 +1484,9 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                 disabled={isWaveRunning}
                 title={tower.levelDescriptions[0]}
               >
-                <span>{tower.icon}</span>
+                <span>{renderTowerMark(tower)}</span>
                 <em>{tower.name}</em>
-                <small>{tower.cost} монет</small>
+                <small>{tower.cost} монет · {getPlacementLabel(tower)}</small>
               </button>
             ))}
           </div>
@@ -1339,10 +1511,10 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                   onClick={() => selectTowerFromSlot(slot)}
                   disabled={!tower || isWaveRunning}
                 >
-                  <span>{tower?.icon ?? '+'}</span>
+                  <span>{renderTowerMark(tower)}</span>
                   <strong>{tower?.name ?? 'Пусто'}</strong>
                   <small>
-                    {tower ? `${tower.cost} монет · DPS ${getDps(tower.damage, tower.cooldown)}` : 'Добавь из бестиария'}
+                    {tower ? `${tower.cost} монет · ${getPlacementLabel(tower)}` : 'Добавь из бестиария'}
                   </small>
                 </button>
                 {tower && (

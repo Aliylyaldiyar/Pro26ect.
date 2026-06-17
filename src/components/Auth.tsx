@@ -40,6 +40,9 @@ export function Auth() {
 
   return (
     <section className="card auth-card">
+      <span className="broken-clock auth-clock" aria-hidden="true" />
+      <span className="time-shard auth-shard-a" aria-hidden="true" />
+      <span className="time-shard auth-shard-b" aria-hidden="true" />
       <h2>{mode === 'signin' ? 'Вход в игру' : 'Создать аккаунт'}</h2>
       <form onSubmit={handleSubmit} className="form">
         <input
