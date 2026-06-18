@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, FormEvent, PointerEvent } from 'react';
+import bossChronomancerSprite from '../assets/boss-chronomancer.svg';
+import bossEpochLordSprite from '../assets/boss-epoch-lord.svg';
+import bossMindRiftSprite from '../assets/boss-mind-rift.svg';
+import bossZeroParadoxSprite from '../assets/boss-zero-paradox.svg';
 import chronoBlastSprite from '../assets/chrono-blast.svg';
 import temporalSniperSprite from '../assets/temporal-sniper.svg';
 import timeScoutSprite from '../assets/time-scout.svg';
+import { easyMonsterIds, getEasyMonsterName, MonsterIcon } from './MonsterIcon';
+import type { EasyMonsterId } from './MonsterIcon';
 
 type Era = {
   name: string;
@@ -40,6 +46,12 @@ type Difficulty = {
   extraEnemies: number;
 };
 
+type BossProfile = {
+  name: string;
+  sprite: string;
+  portraitClass: string;
+};
+
 type GameScreen = 'profile' | 'start' | 'levels' | 'difficulty' | 'loadout' | 'battle';
 
 type LevelMapItem = {
@@ -58,8 +70,51 @@ type LevelMapPoint = {
 };
 
 type MapDecoration = LevelMapPoint & {
-  kind: 'platform' | 'distortion' | 'base' | 'cave' | 'temple' | 'castle' | 'factory' | 'futureCity' | 'cyberCity';
+  kind:
+    | 'platform'
+    | 'distortion'
+    | 'base'
+    | 'cave'
+    | 'temple'
+    | 'castle'
+    | 'factory'
+    | 'futureCity'
+    | 'cyberCity'
+    | 'mammoth'
+    | 'stoneHut'
+    | 'boulder'
+    | 'volcano'
+    | 'pyramid'
+    | 'oasis'
+    | 'farmHouse'
+    | 'pineMountain'
+    | 'mine'
+    | 'smokeStack'
+    | 'hoverDrone'
+    | 'reactor'
+    | 'dataSpire';
   label: string;
+  spanX?: number;
+  spanY?: number;
+};
+
+type BattleDecoration = LevelMapPoint & {
+  kind:
+    | 'mammoth'
+    | 'hut'
+    | 'volcano'
+    | 'rockPile'
+    | 'watchTower'
+    | 'house'
+    | 'mountain'
+    | 'mineCart'
+    | 'pipe'
+    | 'factoryBlock'
+    | 'drone'
+    | 'reactor'
+    | 'energyPylon';
+  spanX?: number;
+  spanY?: number;
 };
 
 type Enemy = {
@@ -69,6 +124,7 @@ type Enemy = {
   maxHp: number;
   slowedUntil: number;
   isBoss: boolean;
+  monsterId: EasyMonsterId | null;
   lastHitAt: number;
   lastHitKind: TowerKind['id'] | null;
   lastDamage: number;
@@ -92,6 +148,11 @@ const maxWaves = 40;
 const baseWaveDuration = 30;
 const skipUnlockDelay = 25;
 const requiredLoadoutSize = 3;
+const minBoardZoom = 0.65;
+const maxBoardZoom = 1.18;
+const boardViewAngle = 20;
+const minBoardTilt = 12;
+const maxBoardTilt = 62;
 const pathCells = [0, 1, 2, 3, 13, 23, 33, 34, 35, 45, 55, 65, 64, 63, 73, 83, 84, 85, 86, 96, 97, 98, 99];
 const buildCells = [11, 12, 14, 21, 22, 24, 31, 32, 36, 37, 42, 43, 44, 46, 47, 54, 56, 57, 62, 66, 67, 72, 74, 75, 82, 87, 88, 92, 93, 94, 95];
 const highlandCells = [12, 24, 36, 47, 62, 74, 88, 94];
@@ -101,7 +162,7 @@ const levelMap: LevelMapItem[] = [
   { id: 2, title: 'Каменная тропа', mapTitle: 'Античность', mapArea: 'ancient', chapter: 'Обучение', startWave: 4, description: 'Дорога становится длиннее и опаснее.' },
   { id: 3, title: 'Ворота замка', mapTitle: 'Средневековье', mapArea: 'medieval', chapter: 'Средние уровни', startWave: 8, description: 'Появляются более крепкие волны.' },
   { id: 4, title: 'Паровой район', mapTitle: 'Индустриальная эпоха', mapArea: 'industrial', chapter: 'Средние уровни', startWave: 12, description: 'Нужно точнее выбирать башни.' },
-  { id: 5, title: 'Разлом секунд', mapTitle: 'Будущее', mapArea: 'future', chapter: 'Сложные уровни', startWave: 18, description: 'Боссы приходят чаще и давят сильнее.' },
+  { id: 5, title: 'Разлом секунд', mapTitle: 'Будущее', mapArea: 'future', chapter: 'Сложные уровни', startWave: 18, description: 'Волны становятся плотнее и давят сильнее.' },
   { id: 6, title: 'Финальный портал', mapTitle: 'Киберпанк', mapArea: 'cyber', chapter: 'Сложные уровни', startWave: 26, description: 'Проверка всей защиты линии времени.' },
 ];
 
@@ -120,6 +181,19 @@ const levelRouteSegments = levelMap.flatMap((level) => [
   [levelMapPositions[level.id], levelRiftPoint] as const,
 ]);
 const mapDecorations: MapDecoration[] = [
+  { kind: 'mammoth', x: 6, y: 4, spanX: 3, spanY: 2, label: 'Мамонт' },
+  { kind: 'stoneHut', x: 3, y: 11, spanX: 3, spanY: 3, label: 'Жилище охотников' },
+  { kind: 'boulder', x: 8, y: 2, spanX: 2, spanY: 2, label: 'Камни' },
+  { kind: 'volcano', x: 6, y: 16, spanX: 4, spanY: 4, label: 'Вулкан' },
+  { kind: 'pyramid', x: 11, y: 8, spanX: 3, spanY: 3, label: 'Пирамида' },
+  { kind: 'oasis', x: 17, y: 8, spanX: 3, spanY: 2, label: 'Оазис' },
+  { kind: 'farmHouse', x: 22, y: 9, spanX: 3, spanY: 3, label: 'Дома' },
+  { kind: 'pineMountain', x: 27, y: 12, spanX: 3, spanY: 4, label: 'Горы' },
+  { kind: 'mine', x: 2, y: 24, spanX: 3, spanY: 3, label: 'Шахта' },
+  { kind: 'smokeStack', x: 9, y: 19, spanX: 2, spanY: 3, label: 'Трубы' },
+  { kind: 'hoverDrone', x: 27, y: 22, spanX: 2, spanY: 2, label: 'Дрон' },
+  { kind: 'reactor', x: 21, y: 26, spanX: 3, spanY: 3, label: 'Реактор' },
+  { kind: 'dataSpire', x: 17, y: 24, spanX: 2, spanY: 4, label: 'Башня данных' },
   { kind: 'cave', x: 2, y: 2, label: 'Пещера' },
   { kind: 'temple', x: 14, y: 3, label: 'Храм' },
   { kind: 'castle', x: 24, y: 3, label: 'Замок' },
@@ -136,6 +210,22 @@ const mapDecorations: MapDecoration[] = [
   { kind: 'distortion', x: 13, y: 20, label: 'Искажение' },
   { kind: 'distortion', x: 20, y: 20, label: 'Искажение' },
   { kind: 'base', x: 15, y: 29, label: 'База игрока' },
+];
+
+const battleDecorations: BattleDecoration[] = [
+  { kind: 'mammoth', x: 7, y: 2, spanX: 2, spanY: 2 },
+  { kind: 'hut', x: 2, y: 7, spanX: 2, spanY: 2 },
+  { kind: 'volcano', x: 8, y: 7, spanX: 2, spanY: 3 },
+  { kind: 'rockPile', x: 5, y: 5, spanX: 2, spanY: 2 },
+  { kind: 'watchTower', x: 7, y: 2, spanX: 2, spanY: 3 },
+  { kind: 'house', x: 2, y: 8, spanX: 2, spanY: 2 },
+  { kind: 'mountain', x: 8, y: 6, spanX: 2, spanY: 3 },
+  { kind: 'mineCart', x: 2, y: 7, spanX: 2, spanY: 2 },
+  { kind: 'pipe', x: 8, y: 2, spanX: 2, spanY: 3 },
+  { kind: 'factoryBlock', x: 5, y: 5, spanX: 2, spanY: 2 },
+  { kind: 'drone', x: 8, y: 2, spanX: 2, spanY: 2 },
+  { kind: 'reactor', x: 2, y: 7, spanX: 2, spanY: 2 },
+  { kind: 'energyPylon', x: 5, y: 5, spanX: 2, spanY: 3 },
 ];
 const levelMapStorageKey = 'chrono-defense-completed-levels';
 
@@ -250,7 +340,7 @@ const difficultyModes: Difficulty[] = [
   },
   {
     id: 'hard',
-    name: 'Сложный',
+    name: 'Разрыв',
     description: 'Враги крепче, ошибок меньше, башни нужно ставить точнее.',
     startCoins: 100,
     startBaseHp: 100,
@@ -267,6 +357,29 @@ const difficultyModes: Difficulty[] = [
     extraEnemies: 2,
   },
 ];
+
+const bossProfiles: Record<Difficulty['id'], BossProfile> = {
+  easy: {
+    name: 'Треснувший Хрономант',
+    sprite: bossChronomancerSprite,
+    portraitClass: 'boss-chronomancer',
+  },
+  experienced: {
+    name: 'Повелитель Эпох',
+    sprite: bossEpochLordSprite,
+    portraitClass: 'boss-epoch-lord',
+  },
+  hard: {
+    name: 'Разлом Сознания',
+    sprite: bossMindRiftSprite,
+    portraitClass: 'boss-mind-rift',
+  },
+  antiTime: {
+    name: 'Нулевой Парадокс',
+    sprite: bossZeroParadoxSprite,
+    portraitClass: 'boss-zero-paradox',
+  },
+};
 
 function cellToPoint(cell: number) {
   return {
@@ -373,6 +486,12 @@ function getAttackSeconds(cooldown: number) {
   return (cooldown / 1000).toFixed(2);
 }
 
+function formatDuration(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
 function getDps(damage: number, cooldown: number) {
   return (damage / (cooldown / 1000)).toFixed(1);
 }
@@ -412,7 +531,7 @@ function chooseTowerTarget(tower: Tower, enemies: Enemy[], range: number) {
 }
 
 function isBossWave(wave: number) {
-  return wave > 0 && wave % 3 === 0;
+  return wave === maxWaves;
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -444,12 +563,13 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   const [selectedLevelId, setSelectedLevelId] = useState(1);
   const [difficulty, setDifficulty] = useState<Difficulty['id']>('easy');
   const selectedDifficultyData = difficultyModes.find((mode) => mode.id === difficulty) ?? difficultyModes[0];
+  const selectedBossProfile = bossProfiles[difficulty];
   const [eraIndex, setEraIndex] = useState(0);
   const [wave, setWave] = useState(1);
   const [coins, setCoins] = useState(selectedDifficultyData.startCoins);
   const [baseHp, setBaseHp] = useState(selectedDifficultyData.startBaseHp);
   const [selectedTower, setSelectedTower] = useState<TowerKind['id']>('arrow');
-  const [towerSlots, setTowerSlots] = useState<TowerSlot[]>(['arrow', 'slow', 'blast', null, null]);
+  const [towerSlots, setTowerSlots] = useState<TowerSlot[]>(['arrow', 'slow', 'blast', null, null, null]);
   const [selectedTowerId, setSelectedTowerId] = useState<number | null>(null);
   const [towers, setTowers] = useState<Tower[]>([]);
   const [enemies, setEnemies] = useState<Enemy[]>([]);
@@ -458,7 +578,9 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   const [isVictory, setIsVictory] = useState(false);
   const [waveTimeLeft, setWaveTimeLeft] = useState(getWaveDuration(1));
   const [message, setMessage] = useState('Поставь башни и запусти первую волну.');
-  const [boardTilt, setBoardTilt] = useState(35);
+  const [gameStartedAt, setGameStartedAt] = useState<number | null>(null);
+  const [defeatDurationSeconds, setDefeatDurationSeconds] = useState(0);
+  const [boardTilt, setBoardTilt] = useState(boardViewAngle);
   const [boardTurn, setBoardTurn] = useState(358);
   const [boardZoom, setBoardZoom] = useState(1);
   const boardRef = useRef<HTMLDivElement | null>(null);
@@ -467,7 +589,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     hasMoved: false,
     startX: 0,
     startY: 0,
-    startTilt: 35,
+    startTilt: boardViewAngle,
     startTurn: 358,
   });
   const ignoreNextBoardClickRef = useRef(false);
@@ -495,19 +617,21 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   }, [enemies]);
 
   useEffect(() => {
+    if (screen !== 'battle') return;
+
     const board = boardRef.current;
     if (!board) return;
 
     function handleWheel(event: globalThis.WheelEvent) {
       event.preventDefault();
       event.stopPropagation();
-      setBoardZoom((current) => clamp(Number((current - event.deltaY * 0.0012).toFixed(2)), 0.65, 1.45));
+      setBoardZoom((current) => clamp(Number((current - event.deltaY * 0.0012).toFixed(2)), minBoardZoom, maxBoardZoom));
     }
 
     board.addEventListener('wheel', handleWheel, { passive: false });
 
     return () => board.removeEventListener('wheel', handleWheel);
-  }, []);
+  }, [screen]);
 
   useEffect(() => {
     if (!isWaveRunning) return;
@@ -550,6 +674,8 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
         const boss = isBossWave(wave) && spawned > regularEnemies;
         const enemyBaseHp = boss ? 240 + wave * 55 : 55 + wave * 14;
         const maxHp = Math.round(enemyBaseHp * selectedDifficultyData.hpMultiplier);
+        const monsterId =
+          !boss && difficulty === 'easy' ? easyMonsterIds[(spawned - 1) % easyMonsterIds.length] : null;
 
       setSpawnedCount(spawned);
       setEnemies((current) => [
@@ -561,6 +687,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           maxHp,
           slowedUntil: 0,
           isBoss: boss,
+          monsterId,
           lastHitAt: 0,
           lastHitKind: null,
           lastDamage: 0,
@@ -573,7 +700,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     }, 780);
 
     return () => window.clearInterval(spawnTimer);
-  }, [isWaveRunning, selectedDifficultyData.extraEnemies, selectedDifficultyData.hpMultiplier, wave]);
+  }, [difficulty, isWaveRunning, selectedDifficultyData.extraEnemies, selectedDifficultyData.hpMultiplier, wave]);
 
   useEffect(() => {
     if (!isWaveRunning) return;
@@ -692,9 +819,10 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   useEffect(() => {
     if (baseHp === 0) {
       setIsWaveRunning(false);
-      setMessage('HP базы закончилось. Нажми "Заново" и попробуй другую расстановку.');
+      setDefeatDurationSeconds(gameStartedAt ? Math.max(1, Math.floor((Date.now() - gameStartedAt) / 1000)) : 0);
+      setMessage('HP базы закончилось. Попробуй другую расстановку.');
     }
-  }, [baseHp]);
+  }, [baseHp, gameStartedAt]);
 
   function submitPlayerProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -702,8 +830,8 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     const cleanName = playerName.trim();
     const age = Number(playerAge);
 
-    if (cleanName.length < 2) {
-      setProfileError('Введи имя минимум из 2 букв.');
+    if (cleanName.length < 3 || cleanName.length > 21) {
+      setProfileError('Введи имя от 3 до 21 буквы.');
       return;
     }
 
@@ -719,8 +847,6 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   }
 
   function addTowerToSlot(kind: TowerKind['id']) {
-    if (isWaveRunning) return;
-
     if (towerSlots.includes(kind)) {
       setSelectedTower(kind);
       setMessage(`${getTowerKind(kind).name} уже есть в слотах.`);
@@ -729,7 +855,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
     const emptySlotIndex = towerSlots.findIndex((slot) => slot === null);
     if (emptySlotIndex === -1) {
-      setMessage('Все 5 слотов заняты. Убери башню из слота, чтобы добавить новую.');
+      setMessage('Все 6 слотов заняты. Убери башню из слота, чтобы добавить новую.');
       return;
     }
 
@@ -739,8 +865,6 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   }
 
   function removeTowerFromSlot(slotIndex: number) {
-    if (isWaveRunning) return;
-
     const removedTower = towerSlots[slotIndex];
     if (!removedTower) return;
 
@@ -755,7 +879,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   }
 
   function selectTowerFromSlot(kind: TowerKind['id'] | null) {
-    if (!kind || isWaveRunning) return;
+    if (!kind) return;
     setSelectedTower(kind);
     setSelectedTowerId(null);
   }
@@ -769,16 +893,14 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     const existingTower = towers.find((tower) => tower.cell === cell);
     if (existingTower) {
       setSelectedTowerId(existingTower.id);
-      if (!isWaveRunning) {
-        upgradeTower(existingTower);
-      }
+      upgradeTower(existingTower);
       return;
     }
 
-    if (!buildCells.includes(cell) || isWaveRunning) return;
+    if (!buildCells.includes(cell)) return;
     const isHighlandCell = highlandCells.includes(cell);
     if (!isSelectedTowerEquipped) {
-      setMessage('Сначала добавь башню в один из 5 слотов.');
+      setMessage('Сначала добавь башню в один из 6 слотов.');
       return;
     }
 
@@ -863,13 +985,15 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     setSpawnedCount(0);
     setIsWaveRunning(false);
     setWaveTimeLeft(getWaveDuration(startWaveNumber));
+    setGameStartedAt(null);
+    setDefeatDurationSeconds(0);
   }
 
   function selectDifficulty(mode: Difficulty) {
     if (isWaveRunning) return;
     setDifficulty(mode.id);
     resetGame(mode, selectedLevel.startWave);
-    setTowerSlots([null, null, null, null, null]);
+    setTowerSlots([null, null, null, null, null, null]);
     setScreen('loadout');
     setMessage(`${selectedLevel.title}. ${mode.name}: собери набор башен перед входом в бой.`);
   }
@@ -881,6 +1005,8 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     }
 
     setScreen('battle');
+    setGameStartedAt(Date.now());
+    setDefeatDurationSeconds(0);
     setMessage(`${selectedLevel.title}. ${selectedDifficultyData.name}: расставь башни и запускай волну.`);
   }
 
@@ -940,23 +1066,19 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
   function restartGame() {
     resetGame(selectedDifficultyData, selectedLevel.startWave);
-    setMessage(`Новая временная линия готова. Сложность: ${selectedDifficultyData.name}.`);
+    setGameStartedAt(Date.now());
+    setMessage('Поставь башни и запусти волну.');
   }
 
-  function goToStartMenu() {
-    if (isWaveRunning) return;
+  function returnToMainMenu() {
+    resetGame(selectedDifficultyData, selectedLevel.startWave);
     setSelectedTowerId(null);
     setScreen('start');
-  }
-
-  function goToDifficultyMenu() {
-    if (isWaveRunning) return;
-    setSelectedTowerId(null);
-    setScreen('difficulty');
+    setMessage('Поставь башни и запусти первую волну.');
   }
 
   function startCameraDrag(event: PointerEvent<HTMLDivElement>) {
-    if (event.button !== 0) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
 
     cameraDragRef.current = {
       active: true,
@@ -966,7 +1088,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
       startTilt: boardTilt,
       startTurn: boardTurn,
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
   function moveCamera(event: PointerEvent<HTMLDivElement>) {
@@ -979,8 +1101,8 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
       drag.hasMoved = true;
     }
 
-    setBoardTurn(drag.startTurn + deltaX * 0.22);
-    setBoardTilt(clamp(drag.startTilt + deltaY * 0.12, 15, 70));
+    setBoardTurn(drag.startTurn + deltaX * 0.3);
+    setBoardTilt(clamp(drag.startTilt + deltaY * 0.16, minBoardTilt, maxBoardTilt));
   }
 
   function stopCameraDrag(event: PointerEvent<HTMLDivElement>) {
@@ -991,14 +1113,20 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     if (drag.hasMoved) {
       ignoreNextBoardClickRef.current = true;
     }
-    event.currentTarget.releasePointerCapture(event.pointerId);
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
   }
 
   return (
-    <section className="game-shell" style={{ '--era': era.accent } as CSSProperties}>
+    <section className={`game-shell ${screen === 'battle' && baseHp === 0 ? 'defeat-state' : ''}`} style={{ '--era': era.accent } as CSSProperties}>
       <div className="time-atmosphere" aria-hidden="true">
         <span className="broken-clock shell-clock-main" />
         <span className="broken-clock shell-clock-small" />
+        <span className="broken-clock chaos-clock chaos-clock-left-top" />
+        <span className="broken-clock chaos-clock chaos-clock-top" />
+        <span className="broken-clock chaos-clock chaos-clock-right" />
+        <span className="broken-clock chaos-clock chaos-clock-right-bottom" />
+        <span className="broken-clock chaos-clock chaos-clock-bottom" />
+        <span className="broken-clock chaos-clock chaos-clock-left" />
         <span className="time-crack shell-crack-a" />
         <span className="time-crack shell-crack-b" />
         <span className="time-shard shell-shard-a" />
@@ -1014,14 +1142,18 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           </p>
         </div>
         {screen === 'battle' && (
-          <div className="stats">
-            <span>Волна {wave}/{maxWaves}</span>
-            <span>{waveTimeLeft} сек</span>
-            <span>{coins} монет</span>
-            <span>{baseHp} HP базы</span>
-          </div>
+          <span className="difficulty-badge">Новая линия готова · {selectedDifficultyData.name}</span>
         )}
       </div>
+
+      {screen === 'battle' && baseHp === 0 && (
+        <div className="retry-panel">
+          <span>HP базы закончилось. Попробуй другую расстановку.</span>
+          <button className="secondary" type="button" onClick={restartGame}>
+            Попробовать ещё раз
+          </button>
+        </div>
+      )}
 
       {screen === 'profile' && (
         <section className="profile-screen">
@@ -1040,6 +1172,8 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                 onChange={(event) => setPlayerName(event.target.value)}
                 placeholder="Например, Алишер"
                 autoComplete="given-name"
+                minLength={3}
+                maxLength={21}
               />
             </label>
             <label>
@@ -1108,17 +1242,19 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                   />
                 ))}
                 <span className="map-rift" aria-hidden="true">Разлом времени</span>
-                {mapDecorations.map((decoration) => (
+                {mapDecorations.map((decoration, index) => (
                   <span
-                    key={`${decoration.kind}-${decoration.x}-${decoration.y}`}
+                    key={`${decoration.kind}-${decoration.x}-${decoration.y}-${index}`}
                     className={`map-decoration ${decoration.kind}`}
                     style={{
-                      gridColumn: `${decoration.x} / span 2`,
-                      gridRow: `${decoration.y} / span 2`,
+                      gridColumn: `${decoration.x} / span ${decoration.spanX ?? 2}`,
+                      gridRow: `${decoration.y} / span ${decoration.spanY ?? 2}`,
                     }}
                     title={decoration.label}
                     aria-hidden="true"
-                  />
+                  >
+                    <span className="map-decoration-core" />
+                  </span>
                 ))}
                 {levelMap.map((level) => {
                   const position = levelMapPositions[level.id];
@@ -1195,6 +1331,20 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
               ? `${era.description} Следующая волна с боссом.`
               : era.description}
         </p>
+        <button
+          className="wave-action era-wave-action"
+          type="button"
+          onClick={isWaveRunning ? skipWave : startWave}
+          disabled={isWaveRunning ? !canSkipWave : baseHp === 0 || isVictory}
+        >
+          {isVictory
+            ? 'Победа'
+            : isWaveRunning
+              ? skipSecondsLeft > 0
+                ? `Скип ${skipSecondsLeft}с`
+                : 'Скип'
+              : 'Запустить'}
+        </button>
       </div>
       )}
 
@@ -1215,10 +1365,13 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
             onClick={() => selectDifficulty(mode)}
             disabled={isWaveRunning}
           >
+            <span className={`difficulty-boss-portrait ${bossProfiles[mode.id].portraitClass}`}>
+              <img src={bossProfiles[mode.id].sprite} alt="" draggable={false} />
+            </span>
             <strong>{mode.name}</strong>
             <span>{mode.description}</span>
             <small>
-              {mode.startCoins} монет · {mode.startBaseHp} HP базы
+              {bossProfiles[mode.id].name} · {mode.startCoins} монет · {mode.startBaseHp} HP базы
             </small>
           </button>
         ))}
@@ -1327,6 +1480,57 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
         <>
       <div className="battle-layout">
         <div className="battle-side-panel">
+          <div className="battle-control-panel">
+            <div className="stats">
+              <span>Волна {wave}/{maxWaves}</span>
+              <span>{waveTimeLeft} сек</span>
+              <span>{coins} монет</span>
+              <span>{baseHp} HP базы</span>
+            </div>
+          </div>
+
+          <div className="battle-tower-picker">
+            <div className="tower-bar" aria-label="6 слотов башен">
+              {towerSlots.map((slot, slotIndex) => {
+                const tower = slot ? getTowerKind(slot) : null;
+
+                return (
+                  <div
+                    className={[
+                      'tower-slot',
+                      tower ? 'filled' : 'empty',
+                      tower && selectedTower === tower.id ? 'active' : '',
+                    ].join(' ')}
+                    key={`${slot ?? 'empty'}-${slotIndex}`}
+                  >
+                    <button
+                      className="tower-choice"
+                      type="button"
+                      onClick={() => selectTowerFromSlot(slot)}
+                      disabled={!tower}
+                    >
+                      <span>{renderTowerMark(tower)}</span>
+                      <strong>{tower?.name ?? 'Пусто'}</strong>
+                      <small>
+                        {tower ? `${tower.cost} монет · ${getPlacementLabel(tower)}` : 'Добавь из бестиария'}
+                      </small>
+                    </button>
+                    {tower && (
+                      <button
+                        className="slot-remove"
+                        type="button"
+                        onClick={() => removeTowerFromSlot(slotIndex)}
+                        aria-label={`Убрать ${tower.name} из слота`}
+                      >
+                        x
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
       {selectedPlacedTower && (
         <div className="upgrade-panel">
           <div>
@@ -1365,7 +1569,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
               className="secondary"
               type="button"
               onClick={() => upgradeTower(selectedPlacedTower)}
-              disabled={isWaveRunning || selectedPlacedTower.level >= maxTowerLevel}
+              disabled={selectedPlacedTower.level >= maxTowerLevel}
             >
               {selectedPlacedTower.level >= maxTowerLevel ? 'Макс.' : `Улучшить за ${getUpgradeCost(selectedPlacedTower)}`}
             </button>
@@ -1379,7 +1583,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
       <div
         ref={boardRef}
-        className="board"
+        className={`board board-${era.ground}`}
         style={
           {
             '--board-tilt': `${boardTilt}deg`,
@@ -1389,15 +1593,27 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
             '--board-zoom': boardZoom,
           } as CSSProperties
         }
-        onPointerDown={startCameraDrag}
+        onPointerDownCapture={startCameraDrag}
         onPointerMove={moveCamera}
         onPointerUp={stopCameraDrag}
         onPointerCancel={stopCameraDrag}
+        onPointerLeave={stopCameraDrag}
         aria-label="Поле tower defence"
       >
         <span className="board-clock-ruin" aria-hidden="true" />
         <span className="board-clock-hand hand-a" aria-hidden="true" />
         <span className="board-clock-hand hand-b" aria-hidden="true" />
+        {battleDecorations.map((decoration, index) => (
+          <span
+            key={`${decoration.kind}-${index}`}
+            className={`battle-decoration ${decoration.kind}`}
+            style={{
+              gridColumn: `${decoration.x} / span ${decoration.spanX ?? 1}`,
+              gridRow: `${decoration.y} / span ${decoration.spanY ?? 1}`,
+            }}
+            aria-hidden="true"
+          />
+        ))}
         {Array.from({ length: boardSize * boardSize }, (_, cell) => {
           const tower = towers.find((item) => item.cell === cell);
           const towerKind = getTowerKind(tower?.kind ?? selectedTower);
@@ -1422,9 +1638,8 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                 isSelectedTower ? 'selected-tower' : '',
               ].join(' ')}
               type="button"
-              onPointerDown={(event) => event.stopPropagation()}
               onClick={() => handleCellClick(cell)}
-              disabled={(!canBuild && !tower) || (isWaveRunning && !tower)}
+              disabled={!canBuild && !tower}
               aria-label={canBuild ? 'Поставить или улучшить башню' : 'Клетка пути'}
             >
               {isSelectedTower && towerStats && (
@@ -1455,10 +1670,24 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                 >
                   <span className="time-ring" />
                   <span className="time-ring late" />
-                  <span className="enemy-core">{enemy.isBoss ? '!' : era.enemy}</span>
+                  <span className="enemy-core">
+                    {enemy.isBoss ? (
+                      <span
+                        className={`boss-portrait ${selectedBossProfile.portraitClass}`}
+                        aria-hidden="true"
+                      >
+                        <img src={selectedBossProfile.sprite} alt="" draggable={false} />
+                      </span>
+                    ) : enemy.monsterId ? (
+                      <MonsterIcon id={enemy.monsterId} />
+                    ) : (
+                      era.enemy
+                    )}
+                  </span>
                   {enemy.lastDamage > 0 && <span className="damage-pop">-{enemy.lastDamage}</span>}
                   <span className="enemy-tooltip">
-                    {enemy.isBoss ? 'Босс · ' : ''}
+                    {enemy.isBoss ? `${selectedBossProfile.name} · ` : ''}
+                    {enemy.monsterId ? `${getEasyMonsterName(enemy.monsterId)} · ` : ''}
                     HP {Math.max(0, Math.ceil(enemy.hp))}/{enemy.maxHp}
                   </span>
                   <i className="enemy-health" style={{ width: `${Math.max(8, (enemy.hp / enemy.maxHp) * 100)}%` }} />
@@ -1470,92 +1699,48 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
       </div>
       </div>
 
-      <div className="battle-dock">
-        <span className="dock-clock-fragment" aria-hidden="true" />
-        <div className="tower-inventory" aria-label="Бестиарий времени">
-          <strong>Бестиарий времени</strong>
-          <div className="bestiary-list">
-            {towerKinds.map((tower) => (
-              <button
-                key={tower.id}
-                className={towerSlots.includes(tower.id) ? 'bestiary-item equipped' : 'bestiary-item'}
-                type="button"
-                onClick={() => addTowerToSlot(tower.id)}
-                disabled={isWaveRunning}
-                title={tower.levelDescriptions[0]}
-              >
-                <span>{renderTowerMark(tower)}</span>
-                <em>{tower.name}</em>
-                <small>{tower.cost} монет · {getPlacementLabel(tower)}</small>
+      <p className="message">{message}</p>
+      {baseHp === 0 && (
+        <div className="defeat-overlay" role="dialog" aria-modal="true" aria-labelledby="defeat-title">
+          <span className="defeat-rift rift-left" aria-hidden="true" />
+          <span className="defeat-rift rift-right" aria-hidden="true" />
+          <span className="broken-clock defeat-clock defeat-clock-a defeat-clock-fast" aria-hidden="true" />
+          <span className="broken-clock defeat-clock defeat-clock-b defeat-clock-back" aria-hidden="true" />
+          <span className="broken-clock defeat-clock defeat-clock-c defeat-clock-slow" aria-hidden="true" />
+          <span className="broken-clock defeat-clock defeat-clock-d defeat-clock-back" aria-hidden="true" />
+          <span className="broken-clock defeat-clock defeat-clock-e defeat-clock-fast" aria-hidden="true" />
+          <div className="defeat-modal">
+            <span className="stopped-clock-frame" aria-hidden="true">
+              <span className="clock-era-layer clock-era-sun" />
+              <span className="clock-era-layer clock-era-atom" />
+              <span className="clock-number clock-number-12" data-roman="XII">12</span>
+              <span className="clock-number clock-number-1" data-roman="I">1</span>
+              <span className="clock-number clock-number-2" data-roman="II">2</span>
+              <span className="clock-number clock-number-3" data-roman="III">3</span>
+              <span className="clock-number clock-number-4" data-roman="IV">4</span>
+              <span className="clock-number clock-number-5" data-roman="V">5</span>
+              <span className="clock-number clock-number-6" data-roman="VI">6</span>
+              <span className="clock-number clock-number-7" data-roman="VII">7</span>
+              <span className="clock-number clock-number-8" data-roman="VIII">8</span>
+              <span className="clock-number clock-number-9" data-roman="IX">9</span>
+              <span className="clock-number clock-number-10" data-roman="X">10</span>
+              <span className="clock-number clock-number-11" data-roman="XI">11</span>
+            </span>
+            <span className="defeat-mark" aria-hidden="true">!</span>
+            <h3 id="defeat-title">Поражение</h3>
+            <p>Линия времени не выдержала натиск.</p>
+            <strong>Время игры: {formatDuration(defeatDurationSeconds)}</strong>
+            <div className="defeat-actions">
+              <button type="button" onClick={restartGame}>
+                Заново
               </button>
-            ))}
+              <button className="secondary" type="button" onClick={returnToMainMenu}>
+                В главное меню
+              </button>
+            </div>
           </div>
         </div>
-
-        <div className="tower-bar" aria-label="5 слотов башен">
-          {towerSlots.map((slot, slotIndex) => {
-            const tower = slot ? getTowerKind(slot) : null;
-
-            return (
-              <div
-                className={[
-                  'tower-slot',
-                  tower ? 'filled' : 'empty',
-                  tower && selectedTower === tower.id ? 'active' : '',
-                ].join(' ')}
-                key={`${slot ?? 'empty'}-${slotIndex}`}
-              >
-                <button
-                  className="tower-choice"
-                  type="button"
-                  onClick={() => selectTowerFromSlot(slot)}
-                  disabled={!tower || isWaveRunning}
-                >
-                  <span>{renderTowerMark(tower)}</span>
-                  <strong>{tower?.name ?? 'Пусто'}</strong>
-                  <small>
-                    {tower ? `${tower.cost} монет · ${getPlacementLabel(tower)}` : 'Добавь из бестиария'}
-                  </small>
-                </button>
-                {tower && (
-                  <button
-                    className="slot-remove"
-                    type="button"
-                    onClick={() => removeTowerFromSlot(slotIndex)}
-                    disabled={isWaveRunning}
-                    aria-label={`Убрать ${tower.name} из слота`}
-                  >
-                    x
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="actions">
-          <button type="button" onClick={startWave} disabled={isWaveRunning || baseHp === 0 || isVictory}>
-            {isVictory ? 'Победа' : isWaveRunning ? 'Волна идет' : 'Запустить'}
-          </button>
-          <button className="secondary" type="button" onClick={skipWave} disabled={!canSkipWave}>
-            {isWaveRunning && skipSecondsLeft > 0 ? `${skipSecondsLeft}с` : 'Скип'}
-          </button>
-          <button className="ghost" type="button" onClick={restartGame}>
-            Заново
-          </button>
-          <button className="ghost" type="button" onClick={goToStartMenu} disabled={isWaveRunning}>
-            Меню
-          </button>
-          <button className="ghost" type="button" onClick={goToDifficultyMenu} disabled={isWaveRunning}>
-            Сложность
-          </button>
-          <button className="ghost" type="button" onClick={() => setScreen('levels')} disabled={isWaveRunning}>
-            Карта
-          </button>
-        </div>
-      </div>
-
-      <p className="message">{message}</p>
+      )}
         </>
       )}
     </section>
