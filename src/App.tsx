@@ -7,6 +7,7 @@ import { TimeTowerDefense } from './components/TimeTowerDefense';
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(isSupabaseReady);
+  const [guestMode, setGuestMode] = useState(false);
 
   useEffect(() => {
     if (!supabase) return;
@@ -31,11 +32,14 @@ export default function App() {
     );
   }
 
-  if (!isSupabaseReady) {
+  if (guestMode) {
     return (
       <main className="container">
         <header className="header">
           <h1>Chrono Defense</h1>
+          <button className="ghost" onClick={() => setGuestMode(false)}>
+            Войти
+          </button>
         </header>
         <TimeTowerDefense userEmail="Гость" />
       </main>
@@ -53,7 +57,7 @@ export default function App() {
         )}
       </header>
 
-      {!session ? <Auth /> : <TimeTowerDefense userEmail={session.user.email ?? ''} />}
+      {!session ? <Auth onPlayAsGuest={() => setGuestMode(true)} /> : <TimeTowerDefense userEmail={session.user.email ?? ''} />}
     </main>
   );
 }
