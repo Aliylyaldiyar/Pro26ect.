@@ -18,6 +18,7 @@
 }
 
 body {
+  min-height: 100vh;
   min-width: 320px;
   background:
     radial-gradient(circle at 14% 18%, rgba(201, 99, 75, 0.16), transparent 28%),
@@ -56,9 +57,15 @@ input {
 }
 
 .container {
-  width: min(100%, 1280px);
+  width: 100%;
+  min-height: 100vh;
   margin: 0 auto;
   padding: clamp(18px, 2.4vw, 34px) clamp(18px, 3vw, 44px) 32px;
+}
+
+.container:has(.auth-card) {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .header {
@@ -191,9 +198,24 @@ input {
 }
 
 .auth-card {
+  align-self: center;
+  width: min(100%, 640px);
+  max-width: 640px;
+  margin: 0 auto;
+  padding: clamp(32px, 4vw, 48px);
   background:
     linear-gradient(135deg, rgba(255, 253, 248, 0.95), rgba(247, 238, 223, 0.88)),
     repeating-linear-gradient(115deg, rgba(71, 48, 31, 0.05) 0 1px, transparent 1px 15px);
+}
+
+.auth-card h2 {
+  font-size: clamp(30px, 2.4vw, 42px);
+}
+
+.auth-card input,
+.auth-card button {
+  min-height: 58px;
+  font-size: 18px;
 }
 
 .broken-clock,
