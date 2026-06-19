@@ -7,6 +7,7 @@ import bossZeroParadoxSprite from '../assets/boss-zero-paradox.svg';
 import chronoBlastSpriteSvg from '../assets/chrono-blast.svg?raw';
 import temporalSniperSpriteSvg from '../assets/temporal-sniper.svg?raw';
 import timeScoutSpriteSvg from '../assets/time-scout.svg?raw';
+import { supabase } from '../lib/supabase';
 import { easyMonsterIds, getEasyMonsterName, MonsterIcon } from './MonsterIcon';
 import type { EasyMonsterId } from './MonsterIcon';
 
@@ -21,7 +22,19 @@ type Era = {
 };
 
 type TowerKind = {
-  id: 'arrow' | 'slow' | 'blast';
+  id:
+    | 'arrow'
+    | 'slow'
+    | 'blast'
+    | 'rift'
+    | 'hourglass'
+    | 'forge'
+    | 'mirror'
+    | 'pulsar'
+    | 'beacon'
+    | 'archive'
+    | 'sun'
+    | 'gravity';
   name: string;
   icon: string;
   sprite?: string;
@@ -132,6 +145,8 @@ type Enemy = {
   ignoredFirstSlow: boolean;
   lastAbilityAt: number;
   slowedUntil: number;
+  stoppedUntil: number;
+  gravityUntil: number;
   isBoss: boolean;
   monsterId: EasyMonsterId | null;
   lastHitAt: number;
@@ -162,6 +177,10 @@ type Tower = {
 
 type GameSound = 'enemySpawn' | 'bossSpawn' | 'arrowHit' | 'slowHit' | 'blastHit' | 'waveStart';
 
+type AiFunctionResponse = {
+  text?: string;
+};
+
 const boardSize = 10;
 const maxTowerLevel = 3;
 const maxWaves = 40;
@@ -189,12 +208,12 @@ const levelMap: LevelMapItem[] = [
 
 const levelMapSize = 30;
 const levelMapPositions: Record<number, LevelMapPoint> = {
-  1: { x: 4, y: 8 },
-  2: { x: 13, y: 7 },
-  3: { x: 23, y: 12 },
-  4: { x: 4, y: 24 },
-  5: { x: 24, y: 24 },
-  6: { x: 13, y: 25 },
+  1: { x: 4, y: 6 },
+  2: { x: 22, y: 5 },
+  3: { x: 23, y: 14 },
+  4: { x: 22, y: 23 },
+  5: { x: 5, y: 23 },
+  6: { x: 4, y: 14 },
 };
 
 const levelRiftPoint: LevelMapPoint = { x: 15.5, y: 15.5 };
@@ -233,6 +252,8 @@ const mapDecorations: MapDecoration[] = [
   { kind: 'base', x: 15, y: 29, label: 'База игрока' },
 ];
 
+void mapDecorations;
+
 const battleDecorations: BattleDecoration[] = [
   { kind: 'mammoth', x: 8, y: 1, spanX: 2, spanY: 2 },
   { kind: 'hut', x: 1, y: 8, spanX: 2, spanY: 2 },
@@ -251,6 +272,8 @@ const battleDecorations: BattleDecoration[] = [
 const levelMapStorageKey = 'chrono-defense-completed-levels';
 const movementThreshold = 8;
 const bossEnemyKindId: EasyMonsterId = 'tickingScarab';
+const aiCommentatorSystem =
+  'Ты ИИ-комментатор tower defense игры. Пиши по-русски, 1 короткое предложение до 120 символов. Не называй врагов, существ, монстров, боссов и их типы прямо. Только намекай на способности и советуй стиль защиты.';
 
 const enemyKinds: Record<EasyMonsterId, EnemyKindData> = {
   tickingScarab: {
@@ -363,6 +386,39 @@ function toSvgDataUri(svg: string) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
+function createTowerSprite(icon: string, primary: string, secondary: string, accent: string) {
+  return toSvgDataUri(`
+    <svg width="220" height="220" viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="shadow" x="-30%" y="-20%" width="160%" height="160%" color-interpolation-filters="sRGB">
+          <feDropShadow dx="0" dy="8" stdDeviation="6" flood-color="#071517" flood-opacity="0.32"/>
+        </filter>
+        <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(110 88) rotate(90) scale(92)">
+          <stop stop-color="#ffffff" stop-opacity="0.92"/>
+          <stop offset="0.34" stop-color="${accent}" stop-opacity="0.68"/>
+          <stop offset="1" stop-color="${accent}" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="body" x1="62" y1="48" x2="152" y2="176" gradientUnits="userSpaceOnUse">
+          <stop stop-color="${primary}"/>
+          <stop offset="1" stop-color="${secondary}"/>
+        </linearGradient>
+      </defs>
+      <ellipse cx="110" cy="190" rx="62" ry="14" fill="#071517" opacity="0.28"/>
+      <circle cx="110" cy="92" r="78" fill="url(#glow)" opacity="0.78"/>
+      <g filter="url(#shadow)">
+        <path d="M72 174L84 86L110 56L136 86L148 174H72Z" fill="url(#body)" stroke="#111820" stroke-width="8" stroke-linejoin="round"/>
+        <path d="M88 87H132L142 172H78L88 87Z" fill="#ffffff" opacity="0.14"/>
+        <circle cx="110" cy="92" r="34" fill="#111820" stroke="${accent}" stroke-width="7"/>
+        <circle cx="110" cy="92" r="21" fill="${accent}" opacity="0.92"/>
+        <text x="110" y="102" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="900" fill="#111820">${icon}</text>
+        <path d="M63 174H157" stroke="#111820" stroke-width="10" stroke-linecap="round"/>
+        <path d="M66 133C86 146 134 146 154 133" stroke="${accent}" stroke-width="5" stroke-linecap="round" opacity="0.82"/>
+        <path d="M54 80L75 92M166 82L145 93M77 44L91 66M143 44L129 66" stroke="${accent}" stroke-width="6" stroke-linecap="round" opacity="0.82"/>
+      </g>
+    </svg>
+  `);
+}
+
 const eras: Era[] = [
   {
     name: 'Каменный век',
@@ -446,6 +502,111 @@ const towerKinds: TowerKind[] = [
     levelDescriptions: ['Пороховой заряд: тяжелый одиночный удар.', 'Усиленное ядро: взрыв бьет заметно больнее.', 'Осадная машина: максимальный урон по крепким целям.'],
   },
 ];
+
+const extraTowerKinds: TowerKind[] = [
+  {
+    id: 'rift',
+    name: 'Разломщик',
+    icon: 'R',
+    sprite: createTowerSprite('R', '#3e2d73', '#17111f', '#b986ff'),
+    cost: 140,
+    damage: 18,
+    range: 2.4,
+    cooldown: 2800,
+    levelDescriptions: ['Открывает короткий разлом: цель и враги рядом получают урон и застревают на миг.', 'Разлом шире: контроль длится дольше, а импульс бьет больнее.', 'Стабильная трещина времени: толпа рядом почти останавливается.'],
+  },
+  {
+    id: 'hourglass',
+    name: 'Песочные часы',
+    icon: 'H',
+    sprite: createTowerSprite('H', '#d8a64d', '#6c4424', '#ffe08a'),
+    cost: 120,
+    damage: 8,
+    range: 3,
+    cooldown: 1600,
+    levelDescriptions: ['Переворачивает песок времени: цель замедляется и становится уязвимее к ударам.', 'Песок течет вверх: замедление держится дольше.', 'Хроно-пыль: враги в радиусе теряют темп почти без перерыва.'],
+  },
+  {
+    id: 'forge',
+    name: 'Хронокузница',
+    icon: 'F',
+    sprite: createTowerSprite('F', '#48515d', '#23272f', '#ffb85f'),
+    cost: 180,
+    damage: 0,
+    range: 2,
+    cooldown: 1000,
+    levelDescriptions: ['Кует секунды: башни рядом стреляют быстрее.', 'Горячие шестерни: бонус скорости атаки становится сильнее.', 'Мастерская эпох: соседние башни работают заметно быстрее.'],
+  },
+  {
+    id: 'mirror',
+    name: 'Зеркало эпох',
+    icon: 'M',
+    sprite: createTowerSprite('M', '#cfd6dc', '#59636f', '#9ceeff'),
+    cost: 150,
+    damage: 12,
+    range: 2.2,
+    cooldown: 1450,
+    levelDescriptions: ['Отражает слабый импульс: цель получает урон, часть удара цепляет соседей.', 'Зеркальная грань: отраженный урон усиливается.', 'Панорама эпох: отражение задевает больше угроз рядом.'],
+  },
+  {
+    id: 'pulsar',
+    name: 'Пульсар секунд',
+    icon: 'P',
+    sprite: createTowerSprite('P', '#217985', '#12333a', '#75fff0'),
+    cost: 170,
+    damage: 22,
+    range: 2,
+    cooldown: 2400,
+    levelDescriptions: ['Пульсирует по клетке: все враги на одной клетке получают урон.', 'Плотный импульс: удар по скоплению становится сильнее.', 'Секундная вспышка: клетка цели взрывается мощной волной.'],
+  },
+  {
+    id: 'beacon',
+    name: 'Маяк памяти',
+    icon: 'L',
+    sprite: createTowerSprite('L', '#f0d58a', '#7a4f2b', '#fff8c7'),
+    cost: 130,
+    damage: 5,
+    range: 3.5,
+    cooldown: 1200,
+    levelDescriptions: ['Подсвечивает искажения: попадает по неуловимым целям и снижает уклонение.', 'Луч памяти: точность и стабильность удара растут.', 'Полный обзор: даже странные временные защиты хуже спасают врагов.'],
+  },
+  {
+    id: 'archive',
+    name: 'Архивариус',
+    icon: 'A',
+    sprite: createTowerSprite('A', '#6d4d9a', '#30243e', '#d9c3ff'),
+    cost: 160,
+    damage: 10,
+    range: 2.3,
+    cooldown: 1700,
+    levelDescriptions: ['Записывает победы: враги, павшие рядом, дают больше монет.', 'Толстый каталог: бонус монет становится выше.', 'Главный архив: защита рядом быстрее окупается.'],
+  },
+  {
+    id: 'sun',
+    name: 'Солнечный обелиск',
+    icon: 'O',
+    sprite: createTowerSprite('O', '#d28b35', '#6b311f', '#fff06a'),
+    cost: 220,
+    damage: 70,
+    range: 3.2,
+    cooldown: 3500,
+    elevatedOnly: true,
+    levelDescriptions: ['Копит луч: редкий, но очень сильный удар по одной цели.', 'Раскаленный камень: луч пробивает крепких врагов сильнее.', 'Солнце эпохи: огромный урон по самой важной цели.'],
+  },
+  {
+    id: 'gravity',
+    name: 'Грави-якорь',
+    icon: 'G',
+    sprite: createTowerSprite('G', '#283047', '#111622', '#8aa7ff'),
+    cost: 175,
+    damage: 14,
+    range: 2.6,
+    cooldown: 1750,
+    levelDescriptions: ['Искривляет клетку: быстрые враги замедляются сильнее обычных.', 'Тяжелое поле: быстрые цели теряют еще больше темпа.', 'Якорь сингулярности: скорость рывков резко падает.'],
+  },
+];
+
+const availableTowerKinds: TowerKind[] = [...towerKinds, ...extraTowerKinds];
 
 const targetPriorityOptions: { id: TargetPriority; name: string; description: string }[] = [
   { id: 'first', name: 'Первый', description: 'Атакует врага ближе всего к порталу' },
@@ -570,6 +731,8 @@ function getLevelMapCellClass(cell: number) {
   return 'grass';
 }
 
+void getLevelMapCellClass;
+
 function getEnemyCell(enemy: Enemy) {
   return pathCells[Math.min(enemy.step, pathCells.length - 1)];
 }
@@ -585,6 +748,31 @@ function getEnemyPool(wave: number): EasyMonsterId[] {
   if (wave < 15) return ['rustChronoid', 'loopSoldier', 'microRift', 'clockhander'];
   if (wave < 22) return ['minuteGhost', 'rustChronoid', 'brokenCourier', 'clockworkSpider', 'microRift'];
   return easyMonsterIds;
+}
+
+function getWaveThreatDescriptions(wave: number, difficultyData: Difficulty) {
+  const regularEnemies = 5 + Math.ceil(wave * 1.45) + difficultyData.extraEnemies;
+  const waveKinds = new Set<EasyMonsterId>();
+
+  for (let spawnIndex = 1; spawnIndex <= regularEnemies; spawnIndex += 1) {
+    waveKinds.add(chooseEnemyKind(wave, spawnIndex));
+  }
+
+  const descriptions = Array.from(waveKinds).map((kind) => getEnemyKind(kind).ability);
+
+  if (isBossWave(wave)) {
+    descriptions.push('оглушает башни, ускоряет угрозы рядом и становится быстрее при низком здоровье');
+  }
+
+  return descriptions;
+}
+
+function getFallbackWaveCommentary(wave: number, isBoss: boolean) {
+  if (isBoss) {
+    return `Комментатор: Волна ${wave}: держи запас прочности, темп может резко сломаться ближе к финалу.`;
+  }
+
+  return `Комментатор: Волна ${wave}: смотри не только на урон, но и на скорость, сопротивления и странные рывки.`;
 }
 
 function chooseEnemyKind(wave: number, spawnIndex: number) {
@@ -615,6 +803,8 @@ function createEnemy(kindId: EasyMonsterId, wave: number, difficultyData: Diffic
     ignoredFirstSlow: false,
     lastAbilityAt: now,
     slowedUntil: 0,
+    stoppedUntil: 0,
+    gravityUntil: 0,
     isBoss: false,
     monsterId: kindId,
     lastHitAt: 0,
@@ -640,7 +830,9 @@ function createBossEnemy(wave: number, difficultyData: Difficulty, idSeed: numbe
 function getEnemySpeed(enemy: Enemy, now: number) {
   let speed = enemy.speed;
 
+  if (enemy.stoppedUntil > now) speed *= 0.12;
   if (enemy.slowedUntil > now) speed *= 0.58;
+  if (enemy.gravityUntil > now) speed *= enemy.speed >= 7 ? 0.55 : 0.82;
   if (enemy.speedBoostUntil > now) speed *= 1.2;
   if (enemy.kind === 'clockhander') {
     const lostHpRatio = 1 - enemy.hp / enemy.maxHp;
@@ -656,9 +848,11 @@ function isEnemyInvulnerable(enemy: Enemy, now: number) {
 }
 
 function getDamageAfterResistance(enemy: Enemy, towerKind: TowerKind['id'], damage: number) {
-  if (enemy.kind === 'chronoRat' && Math.random() < 0.1) return 0;
+  if (enemy.kind === 'chronoRat' && towerKind !== 'beacon' && Math.random() < 0.1) return 0;
   if (enemy.kind === 'rustChronoid' && towerKind !== 'slow') return Math.ceil(damage * 0.85);
   if (enemy.kind === 'minuteGhost' && towerKind === 'slow') return Math.ceil(damage * 0.5);
+  if (towerKind === 'hourglass') return Math.ceil(damage * 1.15);
+  if (towerKind === 'sun' && enemy.hp >= enemy.maxHp * 0.5) return Math.ceil(damage * 1.12);
   return damage;
 }
 
@@ -691,7 +885,7 @@ function getWaveDuration(wave: number) {
 }
 
 function getTowerKind(kind: TowerKind['id']) {
-  return towerKinds.find((tower) => tower.id === kind) ?? towerKinds[0];
+  return availableTowerKinds.find((tower) => tower.id === kind) ?? availableTowerKinds[0];
 }
 
 function getTowerStats(tower: Tower) {
@@ -731,6 +925,26 @@ function getDps(damage: number, cooldown: number) {
   return (damage / (cooldown / 1000)).toFixed(1);
 }
 
+function getForgeCooldownMultiplier(tower: Tower, towers: Tower[]) {
+  const nearbyForge = towers
+    .filter((item) => item.kind === 'forge' && item.id !== tower.id)
+    .find((forge) => distanceBetweenCells(tower.cell, forge.cell) <= getTowerStats(forge).range);
+
+  if (!nearbyForge) return 1;
+
+  return Math.max(0.68, 0.88 - (nearbyForge.level - 1) * 0.05);
+}
+
+function getArchiveRewardBonus(enemy: Enemy, towers: Tower[]) {
+  const archive = towers
+    .filter((tower) => tower.kind === 'archive')
+    .find((tower) => distanceBetweenCells(tower.cell, getEnemyCell(enemy)) <= getTowerStats(tower).range);
+
+  if (!archive) return 0;
+
+  return Math.round(enemy.reward * (0.15 + (archive.level - 1) * 0.08));
+}
+
 function getLandscapeRefund(towers: Tower[]) {
   const invested = towers.reduce((total, tower) => total + tower.invested, 0);
   return Math.round(invested * 1.2);
@@ -763,6 +977,20 @@ function chooseTowerTarget(tower: Tower, enemies: Enemy[], range: number) {
   }
 
   return targets.sort((a, b) => b.step - a.step || Number(b.isBoss) - Number(a.isBoss))[0];
+}
+
+function getTowerSplashTargets(tower: Tower, target: Enemy, enemies: Enemy[]) {
+  if (tower.kind === 'pulsar') {
+    const targetCell = getEnemyCell(target);
+    return enemies.filter((enemy) => getEnemyCell(enemy) === targetCell);
+  }
+
+  if (tower.kind === 'rift' || tower.kind === 'mirror') {
+    const splashRange = tower.kind === 'rift' ? 1.15 + tower.level * 0.12 : 0.95 + tower.level * 0.1;
+    return enemies.filter((enemy) => distanceBetweenCells(getEnemyCell(target), getEnemyCell(enemy)) <= splashRange);
+  }
+
+  return [target];
 }
 
 function isBossWave(wave: number) {
@@ -873,6 +1101,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   const [isVictory, setIsVictory] = useState(false);
   const [waveTimeLeft, setWaveTimeLeft] = useState(getWaveDuration(1));
   const [message, setMessage] = useState('Поставь башни и запусти первую волну.');
+  const [commentatorMessage, setCommentatorMessage] = useState('');
   const [gameStartedAt, setGameStartedAt] = useState<number | null>(null);
   const [defeatDurationSeconds, setDefeatDurationSeconds] = useState(0);
   const [boardTilt, setBoardTilt] = useState(boardViewAngle);
@@ -880,6 +1109,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   const [boardZoom, setBoardZoom] = useState(1);
   const boardRef = useRef<HTMLDivElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const commentatorRequestRef = useRef(0);
   const cameraDragRef = useRef({
     active: false,
     hasMoved: false,
@@ -894,7 +1124,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   const selectedTowerData = getTowerKind(selectedTower);
   const equippedTowerIds = towerSlots.filter((slot): slot is TowerKind['id'] => slot !== null);
   const isSelectedTowerEquipped = equippedTowerIds.includes(selectedTower);
-  const isLoadoutReady = equippedTowerIds.length >= Math.min(requiredLoadoutSize, towerKinds.length);
+  const isLoadoutReady = equippedTowerIds.length >= Math.min(requiredLoadoutSize, availableTowerKinds.length);
   const selectedPlacedTower = towers.find((tower) => tower.id === selectedTowerId) ?? null;
   const selectedLevel = levelMap.find((level) => level.id === selectedLevelId) ?? levelMap[0];
   const enemiesInCurrentWave = 5 + Math.ceil(wave * 1.45) + selectedDifficultyData.extraEnemies + (isBossWave(wave) ? 1 : 0);
@@ -1059,7 +1289,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
         nextTowers = towers.map((tower) => {
           const stats = getTowerStats(tower);
-          const cooldown = stats.cooldown * getTowerSlowMultiplier(tower, nextEnemies, now);
+          const cooldown = stats.cooldown * getTowerSlowMultiplier(tower, nextEnemies, now) * getForgeCooldownMultiplier(tower, towers);
           if (now - tower.lastShotAt < cooldown) {
             return tower;
           }
@@ -1068,17 +1298,28 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
           if (!target) return tower;
 
-          playSound(stats.id === 'arrow' ? 'arrowHit' : stats.id === 'slow' ? 'slowHit' : 'blastHit');
+          const splashTargets = getTowerSplashTargets(tower, target, nextEnemies);
+          const splashTargetIds = new Set(splashTargets.map((enemy) => enemy.id));
+          playSound(stats.id === 'arrow' ? 'arrowHit' : stats.id === 'slow' || stats.id === 'hourglass' || stats.id === 'gravity' ? 'slowHit' : 'blastHit');
           nextEnemies = nextEnemies.map((enemy) => {
-            if (enemy.id !== target.id) return enemy;
-            const isImmune = isEnemyInvulnerable(enemy, now);
-            const damage = isImmune ? 0 : getDamageAfterResistance(enemy, stats.id, stats.damage);
-            const canSlow = stats.id === 'slow' && !isImmune;
+            if (!splashTargetIds.has(enemy.id)) return enemy;
+            const isImmune = isEnemyInvulnerable(enemy, now) && stats.id !== 'beacon';
+            const splashMultiplier = enemy.id === target.id ? 1 : stats.id === 'mirror' ? 0.55 : 0.72;
+            const damage = isImmune ? 0 : getDamageAfterResistance(enemy, stats.id, Math.round(stats.damage * splashMultiplier));
+            const canSlow = (stats.id === 'slow' || stats.id === 'hourglass' || stats.id === 'rift' || stats.id === 'gravity') && !isImmune;
             const ignoresSlow = canSlow && enemy.kind === 'brokenCourier' && !enemy.ignoredFirstSlow;
+            const slowDuration =
+              stats.id === 'hourglass'
+                ? 2600 + tower.level * 420
+                : stats.id === 'gravity'
+                  ? 2400 + tower.level * 380
+                  : 2200 + tower.level * 340;
             return {
               ...enemy,
               hp: enemy.hp - damage,
-              slowedUntil: canSlow && !ignoresSlow ? now + 2200 + tower.level * 340 : enemy.slowedUntil,
+              slowedUntil: canSlow && !ignoresSlow ? now + slowDuration : enemy.slowedUntil,
+              stoppedUntil: stats.id === 'rift' && !isImmune && !ignoresSlow ? now + 520 + tower.level * 180 : enemy.stoppedUntil,
+              gravityUntil: stats.id === 'gravity' && !isImmune && !ignoresSlow ? now + 2600 + tower.level * 420 : enemy.gravityUntil,
               ignoredFirstSlow: enemy.ignoredFirstSlow || ignoresSlow,
               lastHitAt: now,
               lastHitKind: stats.id,
@@ -1120,7 +1361,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
         const aliveEnemies = nextEnemies.filter((enemy) => {
           if (enemy.hp <= 0) {
-            coinsEarned += enemy.isBoss ? enemy.reward : enemy.reward;
+            coinsEarned += enemy.reward + getArchiveRewardBonus(enemy, towers);
             return false;
           }
           if (enemy.step >= pathCells.length - 1) {
@@ -1350,6 +1591,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     setSpawnedCount(0);
     setIsWaveRunning(false);
     setWaveTimeLeft(getWaveDuration(startWaveNumber));
+    setCommentatorMessage('');
     setGameStartedAt(null);
     setDefeatDurationSeconds(0);
   }
@@ -1365,13 +1607,14 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
   function beginBattleAfterLoadout() {
     if (!isLoadoutReady) {
-      setMessage(`Выбери минимум ${Math.min(requiredLoadoutSize, towerKinds.length)} башни в Бестиарии.`);
+      setMessage(`Выбери минимум ${Math.min(requiredLoadoutSize, availableTowerKinds.length)} башни в Бестиарии.`);
       return;
     }
 
     setScreen('battle');
     setGameStartedAt(Date.now());
     setDefeatDurationSeconds(0);
+    setCommentatorMessage('');
     setMessage(`${selectedLevel.title}. ${selectedDifficultyData.name}: расставь башни и запускай волну.`);
   }
 
@@ -1379,14 +1622,56 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     if (isWaveRunning) return;
     setSelectedLevelId(level.id);
     setScreen('difficulty');
+    setCommentatorMessage('');
     setMessage(`${level.title}: ${level.description}`);
+  }
+
+  async function requestWaveCommentary(waveNumber: number, eraName: string, difficultyData: Difficulty) {
+    const requestId = commentatorRequestRef.current + 1;
+    commentatorRequestRef.current = requestId;
+
+    const fallback = getFallbackWaveCommentary(waveNumber, isBossWave(waveNumber));
+    setCommentatorMessage('Комментатор: анализирую искажения волны...');
+
+    if (!supabase) {
+      setCommentatorMessage(fallback);
+      return;
+    }
+
+    const threatDescriptions = getWaveThreatDescriptions(waveNumber, difficultyData);
+    const prompt = [
+      `Волна: ${waveNumber}.`,
+      `Эпоха: ${eraName}.`,
+      `Сложность: ${difficultyData.name}.`,
+      'Способности угроз, без названий:',
+      ...threatDescriptions.map((description, index) => `${index + 1}. ${description}`),
+      'Сделай полезный намек игроку. Не раскрывай, кто именно придет.',
+    ].join('\n');
+
+    try {
+      const { data, error } = await supabase.functions.invoke<AiFunctionResponse>('ai', {
+        body: {
+          prompt,
+          system: aiCommentatorSystem,
+        },
+      });
+
+      if (commentatorRequestRef.current !== requestId) return;
+
+      const text = data?.text?.trim();
+      setCommentatorMessage(error || !text ? fallback : `Комментатор: ${text}`);
+    } catch {
+      if (commentatorRequestRef.current === requestId) {
+        setCommentatorMessage(fallback);
+      }
+    }
   }
 
   function startWave() {
     if (isWaveRunning || baseHp === 0 || isVictory || wave > maxWaves) return;
     if (!isLoadoutReady) {
       setScreen('loadout');
-      setMessage(`Сначала собери набор: минимум ${Math.min(requiredLoadoutSize, towerKinds.length)} башни.`);
+      setMessage(`Сначала собери набор: минимум ${Math.min(requiredLoadoutSize, availableTowerKinds.length)} башни.`);
       return;
     }
     setSelectedTowerId(null);
@@ -1395,6 +1680,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     setWaveTimeLeft(getWaveDuration(wave));
     playSound('waveStart');
     setIsWaveRunning(true);
+    void requestWaveCommentary(wave, era.name, selectedDifficultyData);
     setMessage(
       isBossWave(wave)
         ? `Волна ${wave}: временной босс идет через ${era.name.toLowerCase()}. Режим: ${selectedDifficultyData.name}.`
@@ -1593,56 +1879,16 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           </div>
           <div className="level-map-layout">
             <div className="level-map-card">
-              <div className="map-axis map-axis-top" aria-hidden="true">
-                {Array.from({ length: levelMapSize }, (_, index) => (
-                  <span key={index}>{index + 1}</span>
-                ))}
-              </div>
-              <div className="map-axis map-axis-left" aria-hidden="true">
-                {Array.from({ length: levelMapSize }, (_, index) => (
-                  <span key={index}>{index + 1}</span>
-                ))}
-              </div>
               <div className="level-map" aria-label="Карта уровней 30 на 30">
-                <span className="map-clock-fracture" aria-hidden="true" />
-                {Array.from({ length: levelMapSize * levelMapSize }, (_, cell) => (
-                  <span
-                    key={cell}
-                    className={`map-cell ${getLevelMapCellClass(cell)}`}
-                    aria-hidden="true"
-                  />
-                ))}
+                <span className="map-orbit orbit-a" aria-hidden="true" />
+                <span className="map-orbit orbit-b" aria-hidden="true" />
+                <span className="map-route route-stone" aria-hidden="true" />
+                <span className="map-route route-ancient" aria-hidden="true" />
+                <span className="map-route route-medieval" aria-hidden="true" />
+                <span className="map-route route-industrial" aria-hidden="true" />
+                <span className="map-route route-future" aria-hidden="true" />
+                <span className="map-route route-cyber" aria-hidden="true" />
                 <span className="map-rift" aria-hidden="true">Разлом времени</span>
-                {mapDecorations.map((decoration, index) => (
-                  <span
-                    key={`${decoration.kind}-${decoration.x}-${decoration.y}-${index}`}
-                    className={`map-decoration ${decoration.kind}`}
-                    style={{
-                      gridColumn: `${decoration.x} / span ${decoration.spanX ?? 2}`,
-                      gridRow: `${decoration.y} / span ${decoration.spanY ?? 2}`,
-                    }}
-                    title={decoration.label}
-                    aria-hidden="true"
-                  >
-                    <span className="map-decoration-core" />
-                  </span>
-                ))}
-                {levelMap.map((level) => {
-                  const position = levelMapPositions[level.id];
-                  const isCompleted = completedLevelIds.includes(level.id);
-
-                  return (
-                    <span
-                      key={`region-${level.id}`}
-                      className={`map-region ${level.mapArea} ${isCompleted ? 'completed' : 'locked'}`}
-                      style={{
-                        gridColumn: `${Math.max(1, position.x - 2)} / span 9`,
-                        gridRow: `${Math.max(1, position.y - 3)} / span 8`,
-                      }}
-                      aria-hidden="true"
-                    />
-                  );
-                })}
                 {levelMap.map((level) => {
                   const position = levelMapPositions[level.id];
                   const isCompleted = completedLevelIds.includes(level.id);
@@ -1762,7 +2008,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           <div className="screen-heading">
             <h3>Собери Бестиарий</h3>
             <p>
-              Выбери минимум {Math.min(requiredLoadoutSize, towerKinds.length)} башни для уровня {selectedLevel.title}. После этого откроется поле битвы.
+              Выбери минимум {Math.min(requiredLoadoutSize, availableTowerKinds.length)} башни для уровня {selectedLevel.title}. После этого откроется поле битвы.
             </p>
           </div>
 
@@ -1770,10 +2016,10 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
             <div className="loadout-bestiary" aria-label="Бестиарий времени">
               <div className="loadout-panel-heading">
                 <strong>Бестиарий</strong>
-                <span>{equippedTowerIds.length}/{Math.min(requiredLoadoutSize, towerKinds.length)} выбрано</span>
+                <span>{equippedTowerIds.length}/{Math.min(requiredLoadoutSize, availableTowerKinds.length)} выбрано</span>
               </div>
               <div className="bestiary-list loadout-bestiary-list">
-                {towerKinds.map((tower) => (
+                {availableTowerKinds.map((tower) => (
                   <button
                     key={tower.id}
                     className={towerSlots.includes(tower.id) ? 'bestiary-item equipped' : 'bestiary-item'}
@@ -2074,6 +2320,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
       </div>
 
       <p className="message">{message}</p>
+      {commentatorMessage && <p className="ai-commentary">{commentatorMessage}</p>}
       {baseHp === 0 && (
         <div className="defeat-overlay" role="dialog" aria-modal="true" aria-labelledby="defeat-title">
           <span className="defeat-rift rift-left" aria-hidden="true" />

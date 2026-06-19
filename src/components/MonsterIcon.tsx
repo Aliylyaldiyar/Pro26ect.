@@ -60,8 +60,21 @@ export function MonsterIcon({ id }: MonsterIconProps) {
         <filter id={`${id}-shadow`} x="-30%" y="-25%" width="160%" height="160%" colorInterpolationFilters="sRGB">
           <feDropShadow dx="0" dy="3" stdDeviation="2" floodColor="#071517" floodOpacity="0.3" />
         </filter>
+        <radialGradient id={`${id}-shine`} cx="28%" cy="18%" r="70%">
+          <stop offset="0" stopColor="#ffffff" stopOpacity="0.9" />
+          <stop offset="0.35" stopColor="#ffffff" stopOpacity="0.24" />
+          <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
+        </radialGradient>
       </defs>
+      <circle className="monster-aura" cx="32" cy="34" r="28" />
       <MonsterShape id={id} />
+      <path
+        className="monster-shine"
+        d="M16 22C22 12 38 8 49 20"
+        stroke={`url(#${id}-shine)`}
+        strokeWidth="7"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
