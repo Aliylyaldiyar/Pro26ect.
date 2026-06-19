@@ -3742,6 +3742,22 @@ input {
   animation-duration: 2.25s;
 }
 
+.enemy.boosted .time-ring {
+  border-color: #ffd36d;
+  animation-duration: 0.72s;
+}
+
+.enemy.invulnerable .enemy-core {
+  box-shadow:
+    0 0 0 5px rgba(255, 255, 255, 0.62),
+    0 0 22px rgba(126, 228, 255, 0.62);
+}
+
+.enemy.invulnerable::before {
+  opacity: 0.54;
+  filter: saturate(0.8);
+}
+
 .enemy.boss {
   width: 128%;
   animation-duration: 1.9s;

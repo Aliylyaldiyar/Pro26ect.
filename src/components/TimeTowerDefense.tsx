@@ -119,15 +119,33 @@ type BattleDecoration = LevelMapPoint & {
 
 type Enemy = {
   id: number;
+  kind: EasyMonsterId;
   step: number;
   hp: number;
   maxHp: number;
+  speed: number;
+  reward: number;
+  moveCharge: number;
+  createdAt: number;
+  speedBoostUntil: number;
+  towerSlowUntil: number;
+  ignoredFirstSlow: boolean;
+  lastAbilityAt: number;
   slowedUntil: number;
   isBoss: boolean;
   monsterId: EasyMonsterId | null;
   lastHitAt: number;
   lastHitKind: TowerKind['id'] | null;
   lastDamage: number;
+};
+
+type EnemyKindData = {
+  id: EasyMonsterId;
+  name: string;
+  hp: number;
+  speed: number;
+  reward: number;
+  ability: string;
 };
 
 type Tower = {
@@ -231,6 +249,115 @@ const battleDecorations: BattleDecoration[] = [
   { kind: 'energyPylon', x: 9, y: 5, spanX: 2, spanY: 3 },
 ];
 const levelMapStorageKey = 'chrono-defense-completed-levels';
+const movementThreshold = 8;
+const bossEnemyKindId: EasyMonsterId = 'tickingScarab';
+
+const enemyKinds: Record<EasyMonsterId, EnemyKindData> = {
+  tickingScarab: {
+    id: 'tickingScarab',
+    name: 'Тикающий Скарабей',
+    hp: 100,
+    speed: 8,
+    reward: 16,
+    ability: 'После смерти ускоряет ближайших врагов на 20%.',
+  },
+  lostSecond: {
+    id: 'lostSecond',
+    name: 'Потерянная Секунда',
+    hp: 80,
+    speed: 10,
+    reward: 14,
+    ability: 'Каждые 8 секунд становится неуязвимой на 1 секунду.',
+  },
+  shardRunner: {
+    id: 'shardRunner',
+    name: 'Осколочный Бегун',
+    hp: 120,
+    speed: 7,
+    reward: 18,
+    ability: 'После смерти распадается на 2 маленьких осколка.',
+  },
+  slowedWolf: {
+    id: 'slowedWolf',
+    name: 'Замедлившийся Волк',
+    hp: 140,
+    speed: 6,
+    reward: 20,
+    ability: 'Замедляет ближайшие башни на 10%.',
+  },
+  rustChronoid: {
+    id: 'rustChronoid',
+    name: 'Ржавый Хроноид',
+    hp: 200,
+    speed: 4,
+    reward: 24,
+    ability: 'Получает на 15% меньше физического урона.',
+  },
+  sandPincers: {
+    id: 'sandPincers',
+    name: 'Песочные Клещи',
+    hp: 70,
+    speed: 9,
+    reward: 8,
+    ability: 'Появляются группами по 5.',
+  },
+  chronoRat: {
+    id: 'chronoRat',
+    name: 'Хронокрыс',
+    hp: 90,
+    speed: 8,
+    reward: 14,
+    ability: 'Имеет 10% шанс уклониться от удара.',
+  },
+  loopSoldier: {
+    id: 'loopSoldier',
+    name: 'Зацикленный Солдат',
+    hp: 180,
+    speed: 5,
+    reward: 24,
+    ability: 'Каждые 10 секунд восстанавливает 15% HP.',
+  },
+  microRift: {
+    id: 'microRift',
+    name: 'Микроразломник',
+    hp: 160,
+    speed: 6,
+    reward: 22,
+    ability: 'Телепортируется на 1 клетку вперёд.',
+  },
+  minuteGhost: {
+    id: 'minuteGhost',
+    name: 'Минутный Призрак',
+    hp: 130,
+    speed: 7,
+    reward: 20,
+    ability: 'Получает на 50% меньше магического урона.',
+  },
+  clockhander: {
+    id: 'clockhander',
+    name: 'Стрелочник',
+    hp: 170,
+    speed: 5,
+    reward: 22,
+    ability: 'Ускоряется при потере здоровья.',
+  },
+  brokenCourier: {
+    id: 'brokenCourier',
+    name: 'Сломанный Посыльный',
+    hp: 150,
+    speed: 8,
+    reward: 20,
+    ability: 'Игнорирует первое замедление.',
+  },
+  clockworkSpider: {
+    id: 'clockworkSpider',
+    name: 'Часовой Паук',
+    hp: 120,
+    speed: 7,
+    reward: 18,
+    ability: 'После смерти выпускает мелких паучков.',
+  },
+};
 
 function toSvgDataUri(svg: string) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -282,9 +409,9 @@ const towerKinds: TowerKind[] = [
     icon: 'S',
     sprite: toSvgDataUri(timeScoutSpriteSvg),
     cost: 35,
-    damage: 18,
-    range: 1.8,
-    cooldown: 850,
+    damage: 34,
+    range: 2.25,
+    cooldown: 760,
     levelDescriptions: [
       'Скаут с карманными часами: быстрый точный удар по линии времени.',
       'Усиленный хронометр: больше урона и ярче импульс атаки.',
@@ -297,9 +424,9 @@ const towerKinds: TowerKind[] = [
     icon: 'C',
     sprite: toSvgDataUri(chronoBlastSpriteSvg),
     cost: 55,
-    damage: 8,
-    range: 2.1,
-    cooldown: 1100,
+    damage: 16,
+    range: 2.55,
+    cooldown: 980,
     levelDescriptions: [
       'Песочные часы: слегка замедляет время врага.',
       'Хронологическая достоверность: время врага сбивается сильнее.',
@@ -312,9 +439,9 @@ const towerKinds: TowerKind[] = [
     icon: 'B',
     sprite: toSvgDataUri(temporalSniperSpriteSvg),
     cost: 80,
-    damage: 38,
-    range: 1.5,
-    cooldown: 1450,
+    damage: 92,
+    range: 2,
+    cooldown: 1260,
     elevatedOnly: true,
     levelDescriptions: ['Пороховой заряд: тяжелый одиночный удар.', 'Усиленное ядро: взрыв бьет заметно больнее.', 'Осадная машина: максимальный урон по крепким целям.'],
   },
@@ -447,6 +574,102 @@ function getEnemyCell(enemy: Enemy) {
   return pathCells[Math.min(enemy.step, pathCells.length - 1)];
 }
 
+function getEnemyKind(kind: EasyMonsterId) {
+  return enemyKinds[kind];
+}
+
+function getEnemyPool(wave: number): EasyMonsterId[] {
+  if (wave < 3) return ['tickingScarab', 'sandPincers'];
+  if (wave < 6) return ['tickingScarab', 'lostSecond', 'sandPincers', 'chronoRat'];
+  if (wave < 10) return ['shardRunner', 'slowedWolf', 'brokenCourier', 'sandPincers'];
+  if (wave < 15) return ['rustChronoid', 'loopSoldier', 'microRift', 'clockhander'];
+  if (wave < 22) return ['minuteGhost', 'rustChronoid', 'brokenCourier', 'clockworkSpider', 'microRift'];
+  return easyMonsterIds;
+}
+
+function chooseEnemyKind(wave: number, spawnIndex: number) {
+  const pool = getEnemyPool(wave);
+  return pool[(spawnIndex + wave) % pool.length];
+}
+
+function getWaveHpMultiplier(wave: number) {
+  return 0.72 + wave * 0.075;
+}
+
+function createEnemy(kindId: EasyMonsterId, wave: number, difficultyData: Difficulty, idSeed: number, now: number, hpScale = 1): Enemy {
+  const kind = getEnemyKind(kindId);
+  const maxHp = Math.round(kind.hp * getWaveHpMultiplier(wave) * difficultyData.hpMultiplier * hpScale);
+
+  return {
+    id: idSeed,
+    kind: kindId,
+    step: 0,
+    hp: maxHp,
+    maxHp,
+    speed: kind.speed,
+    reward: Math.round(kind.reward * (1 + wave * 0.025)),
+    moveCharge: 0,
+    createdAt: now,
+    speedBoostUntil: 0,
+    towerSlowUntil: 0,
+    ignoredFirstSlow: false,
+    lastAbilityAt: now,
+    slowedUntil: 0,
+    isBoss: false,
+    monsterId: kindId,
+    lastHitAt: 0,
+    lastHitKind: null,
+    lastDamage: 0,
+  };
+}
+
+function createBossEnemy(wave: number, difficultyData: Difficulty, idSeed: number, now: number): Enemy {
+  const maxHp = Math.round(10000 * difficultyData.hpMultiplier);
+
+  return {
+    ...createEnemy(bossEnemyKindId, wave, difficultyData, idSeed, now, 1),
+    hp: maxHp,
+    maxHp,
+    speed: 3,
+    reward: 500,
+    isBoss: true,
+    monsterId: null,
+  };
+}
+
+function getEnemySpeed(enemy: Enemy, now: number) {
+  let speed = enemy.speed;
+
+  if (enemy.slowedUntil > now) speed *= 0.58;
+  if (enemy.speedBoostUntil > now) speed *= 1.2;
+  if (enemy.kind === 'clockhander') {
+    const lostHpRatio = 1 - enemy.hp / enemy.maxHp;
+    speed *= 1 + lostHpRatio * 0.55;
+  }
+  if (enemy.isBoss && enemy.hp <= enemy.maxHp * 0.25) speed *= 1.5;
+
+  return speed;
+}
+
+function isEnemyInvulnerable(enemy: Enemy, now: number) {
+  return enemy.kind === 'lostSecond' && (now - enemy.createdAt) % 8000 < 1000;
+}
+
+function getDamageAfterResistance(enemy: Enemy, towerKind: TowerKind['id'], damage: number) {
+  if (enemy.kind === 'chronoRat' && Math.random() < 0.1) return 0;
+  if (enemy.kind === 'rustChronoid' && towerKind !== 'slow') return Math.ceil(damage * 0.85);
+  if (enemy.kind === 'minuteGhost' && towerKind === 'slow') return Math.ceil(damage * 0.5);
+  return damage;
+}
+
+function getTowerSlowMultiplier(tower: Tower, enemies: Enemy[], now: number) {
+  if (enemies.some((enemy) => enemy.isBoss && enemy.towerSlowUntil > now)) return 3.4;
+
+  return enemies.some((enemy) => enemy.kind === 'slowedWolf' && enemy.towerSlowUntil > now && distanceBetweenCells(tower.cell, getEnemyCell(enemy)) <= 1.8)
+    ? 1.1
+    : 1;
+}
+
 function isBuildableCell(cell: number) {
   return buildCells.includes(cell);
 }
@@ -463,6 +686,7 @@ function getTileDetailClass(cell: number) {
 }
 
 function getWaveDuration(wave: number) {
+  if (isBossWave(wave)) return 120;
   return baseWaveDuration + Math.min(20, wave * 3);
 }
 
@@ -673,7 +897,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   const isLoadoutReady = equippedTowerIds.length >= Math.min(requiredLoadoutSize, towerKinds.length);
   const selectedPlacedTower = towers.find((tower) => tower.id === selectedTowerId) ?? null;
   const selectedLevel = levelMap.find((level) => level.id === selectedLevelId) ?? levelMap[0];
-  const enemiesInCurrentWave = 5 + wave * 2 + selectedDifficultyData.extraEnemies + (isBossWave(wave) ? 1 : 0);
+  const enemiesInCurrentWave = 5 + Math.ceil(wave * 1.45) + selectedDifficultyData.extraEnemies + (isBossWave(wave) ? 1 : 0);
   const waveElapsedSeconds = Math.max(0, getWaveDuration(wave) - waveTimeLeft);
   const skipSecondsLeft = Math.max(0, skipUnlockDelay - waveElapsedSeconds);
   const canSkipWave = isWaveRunning && skipSecondsLeft === 0 && baseHp > 0 && !isVictory;
@@ -753,32 +977,22 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     if (!isWaveRunning) return;
 
     let spawned = 0;
-      const regularEnemies = 5 + wave * 2 + selectedDifficultyData.extraEnemies;
+      const regularEnemies = 5 + Math.ceil(wave * 1.45) + selectedDifficultyData.extraEnemies;
       const spawnTimer = window.setInterval(() => {
         spawned += 1;
         const boss = isBossWave(wave) && spawned > regularEnemies;
-        const enemyBaseHp = boss ? 240 + wave * 55 : 55 + wave * 14;
-        const maxHp = Math.round(enemyBaseHp * selectedDifficultyData.hpMultiplier);
-        const monsterId =
-          !boss && difficulty === 'easy' ? easyMonsterIds[(spawned - 1) % easyMonsterIds.length] : null;
+        const now = Date.now();
+        const kindId = boss ? bossEnemyKindId : chooseEnemyKind(wave, spawned);
+        const groupSize = !boss && kindId === 'sandPincers' ? 5 : 1;
+        const spawnedEnemies = Array.from({ length: groupSize }, (_, index) =>
+          boss
+            ? createBossEnemy(wave, selectedDifficultyData, now + spawned + index, now)
+            : createEnemy(kindId, wave, selectedDifficultyData, now + spawned + index, now),
+        );
 
       playSound(boss ? 'bossSpawn' : 'enemySpawn');
-      setSpawnedCount(spawned);
-      setEnemies((current) => [
-        ...current,
-        {
-          id: Date.now() + spawned,
-          step: 0,
-          hp: maxHp,
-          maxHp,
-          slowedUntil: 0,
-          isBoss: boss,
-          monsterId,
-          lastHitAt: 0,
-          lastHitKind: null,
-          lastDamage: 0,
-        },
-      ]);
+      setSpawnedCount((current) => current + spawnedEnemies.length);
+      setEnemies((current) => [...current, ...spawnedEnemies]);
 
       if (spawned >= regularEnemies + (isBossWave(wave) ? 1 : 0)) {
         window.clearInterval(spawnTimer);
@@ -799,14 +1013,54 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
       setEnemies((currentEnemies) => {
         let nextEnemies = currentEnemies.map((enemy) => {
-          const isSlowed = enemy.slowedUntil > now;
-          const shouldMove = enemy.isBoss ? !isSlowed && now % 2 === 0 : !isSlowed;
-          return { ...enemy, step: enemy.step + (shouldMove ? 1 : 0) };
+          let nextEnemy = enemy;
+
+          if (enemy.kind === 'loopSoldier' && now - enemy.lastAbilityAt >= 10000) {
+            nextEnemy = {
+              ...nextEnemy,
+              hp: Math.min(nextEnemy.maxHp, nextEnemy.hp + Math.round(nextEnemy.maxHp * 0.15)),
+              lastAbilityAt: now,
+            };
+          }
+
+          if (enemy.kind === 'microRift' && now - enemy.lastAbilityAt >= 6500) {
+            nextEnemy = {
+              ...nextEnemy,
+              step: Math.min(pathCells.length - 1, nextEnemy.step + 1),
+              lastAbilityAt: now,
+            };
+          }
+
+          if (enemy.kind === 'slowedWolf') {
+            nextEnemy = { ...nextEnemy, towerSlowUntil: now + 900 };
+          }
+
+          if (enemy.isBoss && now - enemy.lastAbilityAt >= 9000) {
+            const abilityIndex = Math.floor((now - enemy.createdAt) / 9000) % 2;
+            nextEnemy = {
+              ...nextEnemy,
+              speedBoostUntil: abilityIndex === 1 ? now + 2500 : nextEnemy.speedBoostUntil,
+              towerSlowUntil: abilityIndex === 0 ? now + 2000 : nextEnemy.towerSlowUntil,
+              lastAbilityAt: now,
+            };
+          }
+
+          const moveCharge = nextEnemy.moveCharge + getEnemySpeed(nextEnemy, now);
+          const stepsToMove = Math.floor(moveCharge / movementThreshold);
+          return {
+            ...nextEnemy,
+            moveCharge: moveCharge % movementThreshold,
+            step: Math.min(pathCells.length - 1, nextEnemy.step + stepsToMove),
+          };
         });
+        if (nextEnemies.some((enemy) => enemy.isBoss && enemy.speedBoostUntil > now)) {
+          nextEnemies = nextEnemies.map((enemy) => (enemy.isBoss ? enemy : { ...enemy, speedBoostUntil: now + 2500 }));
+        }
 
         nextTowers = towers.map((tower) => {
           const stats = getTowerStats(tower);
-          if (now - tower.lastShotAt < stats.cooldown) {
+          const cooldown = stats.cooldown * getTowerSlowMultiplier(tower, nextEnemies, now);
+          if (now - tower.lastShotAt < cooldown) {
             return tower;
           }
 
@@ -817,13 +1071,18 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           playSound(stats.id === 'arrow' ? 'arrowHit' : stats.id === 'slow' ? 'slowHit' : 'blastHit');
           nextEnemies = nextEnemies.map((enemy) => {
             if (enemy.id !== target.id) return enemy;
+            const isImmune = isEnemyInvulnerable(enemy, now);
+            const damage = isImmune ? 0 : getDamageAfterResistance(enemy, stats.id, stats.damage);
+            const canSlow = stats.id === 'slow' && !isImmune;
+            const ignoresSlow = canSlow && enemy.kind === 'brokenCourier' && !enemy.ignoredFirstSlow;
             return {
               ...enemy,
-              hp: enemy.hp - stats.damage,
-              slowedUntil: stats.id === 'slow' ? now + 1800 + tower.level * 260 : enemy.slowedUntil,
+              hp: enemy.hp - damage,
+              slowedUntil: canSlow && !ignoresSlow ? now + 2200 + tower.level * 340 : enemy.slowedUntil,
+              ignoredFirstSlow: enemy.ignoredFirstSlow || ignoresSlow,
               lastHitAt: now,
               lastHitKind: stats.id,
-              lastDamage: stats.damage,
+              lastDamage: damage,
             };
           });
 
@@ -835,17 +1094,41 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           };
         });
 
+        const spawnedByDeaths: Enemy[] = [];
+        const defeatedEnemies = nextEnemies.filter((enemy) => enemy.hp <= 0);
+        defeatedEnemies.forEach((enemy) => {
+          if (enemy.kind === 'tickingScarab') {
+            nextEnemies = nextEnemies.map((item) =>
+              item.id !== enemy.id && Math.abs(item.step - enemy.step) <= 3 ? { ...item, speedBoostUntil: now + 3500 } : item,
+            );
+          }
+
+          if (enemy.kind === 'shardRunner') {
+            spawnedByDeaths.push(
+              createEnemy('sandPincers', wave, selectedDifficultyData, now + enemy.id + 1, now, 0.38),
+              createEnemy('sandPincers', wave, selectedDifficultyData, now + enemy.id + 2, now, 0.38),
+            );
+          }
+
+          if (enemy.kind === 'clockworkSpider') {
+            spawnedByDeaths.push(
+              createEnemy('chronoRat', wave, selectedDifficultyData, now + enemy.id + 3, now, 0.45),
+              createEnemy('chronoRat', wave, selectedDifficultyData, now + enemy.id + 4, now, 0.45),
+            );
+          }
+        });
+
         const aliveEnemies = nextEnemies.filter((enemy) => {
           if (enemy.hp <= 0) {
-            coinsEarned += enemy.isBoss ? 90 : 12;
+            coinsEarned += enemy.isBoss ? enemy.reward : enemy.reward;
             return false;
           }
           if (enemy.step >= pathCells.length - 1) {
-            escapedDamage += Math.max(1, Math.ceil(enemy.hp));
+            escapedDamage += enemy.isBoss ? baseHp : Math.max(1, Math.ceil(enemy.hp / 35));
             return false;
           }
           return true;
-        });
+        }).concat(spawnedByDeaths);
 
         if (escapedDamage >= baseHp) {
           setIsWaveRunning(false);
@@ -1750,6 +2033,8 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                     'time-distorted',
                     enemy.isBoss ? 'boss' : '',
                     enemy.slowedUntil > Date.now() ? 'slowed' : '',
+                    enemy.speedBoostUntil > Date.now() ? 'boosted' : '',
+                    isEnemyInvulnerable(enemy, Date.now()) ? 'invulnerable' : '',
                     enemy.lastHitAt > 0 ? 'hit' : '',
                     enemy.lastHitKind ? `hit-${enemy.lastHitKind}` : '',
                   ].join(' ')}
@@ -1777,6 +2062,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                     {enemy.isBoss ? `${selectedBossProfile.name} · ` : ''}
                     {enemy.monsterId ? `${getEasyMonsterName(enemy.monsterId)} · ` : ''}
                     HP {Math.max(0, Math.ceil(enemy.hp))}/{enemy.maxHp}
+                    {enemy.monsterId ? ` · скорость ${getEnemyKind(enemy.monsterId).speed} · ${getEnemyKind(enemy.monsterId).ability}` : ' · скорость 3 · оглушает башни, ускоряет врагов, разгоняется при 25% HP'}
                   </span>
                   <i className="enemy-health" style={{ width: `${Math.max(8, (enemy.hp / enemy.maxHp) * 100)}%` }} />
                 </span>
