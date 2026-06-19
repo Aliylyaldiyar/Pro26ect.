@@ -4,9 +4,9 @@ import bossChronomancerSprite from '../assets/boss-chronomancer.svg';
 import bossEpochLordSprite from '../assets/boss-epoch-lord.svg';
 import bossMindRiftSprite from '../assets/boss-mind-rift.svg';
 import bossZeroParadoxSprite from '../assets/boss-zero-paradox.svg';
-import chronoBlastSprite from '../assets/chrono-blast.svg';
-import temporalSniperSprite from '../assets/temporal-sniper.svg';
-import timeScoutSprite from '../assets/time-scout.svg';
+import chronoBlastSpriteSvg from '../assets/chrono-blast.svg?raw';
+import temporalSniperSpriteSvg from '../assets/temporal-sniper.svg?raw';
+import timeScoutSpriteSvg from '../assets/time-scout.svg?raw';
 import { easyMonsterIds, getEasyMonsterName, MonsterIcon } from './MonsterIcon';
 import type { EasyMonsterId } from './MonsterIcon';
 
@@ -142,6 +142,8 @@ type Tower = {
   lastTargetCell: number | null;
 };
 
+type GameSound = 'enemySpawn' | 'bossSpawn' | 'arrowHit' | 'slowHit' | 'blastHit' | 'waveStart';
+
 const boardSize = 10;
 const maxTowerLevel = 3;
 const maxWaves = 40;
@@ -153,6 +155,7 @@ const maxBoardZoom = 1.18;
 const boardViewAngle = 20;
 const minBoardTilt = 12;
 const maxBoardTilt = 62;
+const cameraDragThreshold = 8;
 const pathCells = [0, 1, 2, 3, 13, 23, 33, 34, 35, 45, 55, 65, 64, 63, 73, 83, 84, 85, 86, 96, 97, 98, 99];
 const buildCells = [11, 12, 14, 21, 22, 24, 31, 32, 36, 37, 42, 43, 44, 46, 47, 54, 56, 57, 62, 66, 67, 72, 74, 75, 82, 87, 88, 92, 93, 94, 95];
 const highlandCells = [12, 24, 36, 47, 62, 74, 88, 94];
@@ -213,21 +216,25 @@ const mapDecorations: MapDecoration[] = [
 ];
 
 const battleDecorations: BattleDecoration[] = [
-  { kind: 'mammoth', x: 7, y: 2, spanX: 2, spanY: 2 },
-  { kind: 'hut', x: 2, y: 7, spanX: 2, spanY: 2 },
-  { kind: 'volcano', x: 8, y: 7, spanX: 2, spanY: 3 },
-  { kind: 'rockPile', x: 5, y: 5, spanX: 2, spanY: 2 },
-  { kind: 'watchTower', x: 7, y: 2, spanX: 2, spanY: 3 },
-  { kind: 'house', x: 2, y: 8, spanX: 2, spanY: 2 },
-  { kind: 'mountain', x: 8, y: 6, spanX: 2, spanY: 3 },
-  { kind: 'mineCart', x: 2, y: 7, spanX: 2, spanY: 2 },
-  { kind: 'pipe', x: 8, y: 2, spanX: 2, spanY: 3 },
-  { kind: 'factoryBlock', x: 5, y: 5, spanX: 2, spanY: 2 },
-  { kind: 'drone', x: 8, y: 2, spanX: 2, spanY: 2 },
-  { kind: 'reactor', x: 2, y: 7, spanX: 2, spanY: 2 },
-  { kind: 'energyPylon', x: 5, y: 5, spanX: 2, spanY: 3 },
+  { kind: 'mammoth', x: 8, y: 1, spanX: 2, spanY: 2 },
+  { kind: 'hut', x: 1, y: 8, spanX: 2, spanY: 2 },
+  { kind: 'volcano', x: 9, y: 6, spanX: 2, spanY: 3 },
+  { kind: 'rockPile', x: 1, y: 5, spanX: 2, spanY: 2 },
+  { kind: 'watchTower', x: 9, y: 1, spanX: 2, spanY: 3 },
+  { kind: 'house', x: 1, y: 9, spanX: 2, spanY: 2 },
+  { kind: 'mountain', x: 6, y: 1, spanX: 3, spanY: 2 },
+  { kind: 'mineCart', x: 1, y: 8, spanX: 2, spanY: 2 },
+  { kind: 'pipe', x: 9, y: 3, spanX: 2, spanY: 3 },
+  { kind: 'factoryBlock', x: 6, y: 1, spanX: 2, spanY: 2 },
+  { kind: 'drone', x: 9, y: 1, spanX: 2, spanY: 2 },
+  { kind: 'reactor', x: 1, y: 8, spanX: 2, spanY: 2 },
+  { kind: 'energyPylon', x: 9, y: 5, spanX: 2, spanY: 3 },
 ];
 const levelMapStorageKey = 'chrono-defense-completed-levels';
+
+function toSvgDataUri(svg: string) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
 
 const eras: Era[] = [
   {
@@ -273,7 +280,7 @@ const towerKinds: TowerKind[] = [
     id: 'arrow',
     name: 'Скаут времени',
     icon: 'S',
-    sprite: timeScoutSprite,
+    sprite: toSvgDataUri(timeScoutSpriteSvg),
     cost: 35,
     damage: 18,
     range: 1.8,
@@ -288,7 +295,7 @@ const towerKinds: TowerKind[] = [
     id: 'slow',
     name: 'Хроно-бласт',
     icon: 'C',
-    sprite: chronoBlastSprite,
+    sprite: toSvgDataUri(chronoBlastSpriteSvg),
     cost: 55,
     damage: 8,
     range: 2.1,
@@ -303,7 +310,7 @@ const towerKinds: TowerKind[] = [
     id: 'blast',
     name: 'Временной снайпер',
     icon: 'B',
-    sprite: temporalSniperSprite,
+    sprite: toSvgDataUri(temporalSniperSpriteSvg),
     cost: 80,
     damage: 38,
     range: 1.5,
@@ -440,6 +447,10 @@ function getEnemyCell(enemy: Enemy) {
   return pathCells[Math.min(enemy.step, pathCells.length - 1)];
 }
 
+function isBuildableCell(cell: number) {
+  return buildCells.includes(cell);
+}
+
 function getTileDetailClass(cell: number) {
   if (cell === pathCells[0]) return 'start-gate';
   if (cell === pathCells[pathCells.length - 1]) return 'time-portal';
@@ -538,6 +549,66 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function playTone(
+  audioContext: AudioContext,
+  frequency: number,
+  startTime: number,
+  duration: number,
+  volume: number,
+  waveType: OscillatorType,
+) {
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+
+  oscillator.type = waveType;
+  oscillator.frequency.setValueAtTime(frequency, startTime);
+  gain.gain.setValueAtTime(0.0001, startTime);
+  gain.gain.exponentialRampToValueAtTime(volume, startTime + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+  oscillator.connect(gain);
+  gain.connect(audioContext.destination);
+  oscillator.start(startTime);
+  oscillator.stop(startTime + duration + 0.03);
+}
+
+function playGameSound(audioContext: AudioContext, sound: GameSound) {
+  const now = audioContext.currentTime;
+
+  if (sound === 'enemySpawn') {
+    playTone(audioContext, 180, now, 0.09, 0.035, 'square');
+    playTone(audioContext, 132, now + 0.055, 0.08, 0.025, 'sawtooth');
+    return;
+  }
+
+  if (sound === 'bossSpawn') {
+    playTone(audioContext, 92, now, 0.22, 0.05, 'sawtooth');
+    playTone(audioContext, 58, now + 0.08, 0.25, 0.035, 'triangle');
+    return;
+  }
+
+  if (sound === 'arrowHit') {
+    playTone(audioContext, 740, now, 0.055, 0.028, 'triangle');
+    playTone(audioContext, 420, now + 0.035, 0.06, 0.02, 'square');
+    return;
+  }
+
+  if (sound === 'slowHit') {
+    playTone(audioContext, 330, now, 0.12, 0.028, 'sine');
+    playTone(audioContext, 248, now + 0.05, 0.14, 0.02, 'triangle');
+    return;
+  }
+
+  if (sound === 'blastHit') {
+    playTone(audioContext, 118, now, 0.14, 0.045, 'sawtooth');
+    playTone(audioContext, 74, now + 0.045, 0.16, 0.03, 'square');
+    return;
+  }
+
+  playTone(audioContext, 420, now, 0.08, 0.025, 'triangle');
+  playTone(audioContext, 620, now + 0.07, 0.1, 0.02, 'sine');
+}
+
 function readCompletedLevelIds() {
   const savedLevels = window.localStorage.getItem(levelMapStorageKey);
   if (!savedLevels) return [];
@@ -584,6 +655,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   const [boardTurn, setBoardTurn] = useState(358);
   const [boardZoom, setBoardZoom] = useState(1);
   const boardRef = useRef<HTMLDivElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const cameraDragRef = useRef({
     active: false,
     hasMoved: false,
@@ -606,6 +678,19 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   const skipSecondsLeft = Math.max(0, skipUnlockDelay - waveElapsedSeconds);
   const canSkipWave = isWaveRunning && skipSecondsLeft === 0 && baseHp > 0 && !isVictory;
   const playerLabel = playerName.trim() ? `${playerName.trim()}, ${playerAge} лет` : userEmail;
+
+  function playSound(sound: GameSound) {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContext();
+    }
+
+    const audioContext = audioContextRef.current;
+    if (audioContext.state === 'suspended') {
+      audioContext.resume().catch(() => undefined);
+    }
+
+    playGameSound(audioContext, sound);
+  }
 
   const enemiesByCell = useMemo(() => {
     const map = new Map<number, Enemy[]>();
@@ -677,6 +762,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
         const monsterId =
           !boss && difficulty === 'easy' ? easyMonsterIds[(spawned - 1) % easyMonsterIds.length] : null;
 
+      playSound(boss ? 'bossSpawn' : 'enemySpawn');
       setSpawnedCount(spawned);
       setEnemies((current) => [
         ...current,
@@ -728,6 +814,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
           if (!target) return tower;
 
+          playSound(stats.id === 'arrow' ? 'arrowHit' : stats.id === 'slow' ? 'slowHit' : 'blastHit');
           nextEnemies = nextEnemies.map((enemy) => {
             if (enemy.id !== target.id) return enemy;
             return {
@@ -897,7 +984,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
       return;
     }
 
-    if (!buildCells.includes(cell)) return;
+    if (!isBuildableCell(cell)) return;
     const isHighlandCell = highlandCells.includes(cell);
     if (!isSelectedTowerEquipped) {
       setMessage('Сначала добавь башню в один из 6 слотов.');
@@ -906,11 +993,6 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
     if (selectedTowerData.elevatedOnly && !isHighlandCell) {
       setMessage(`${selectedTowerData.name} ставится только на возвышенности.`);
-      return;
-    }
-
-    if (!selectedTowerData.elevatedOnly && isHighlandCell) {
-      setMessage('Эта возвышенность подходит только для башен со статусом "только возвышенность".');
       return;
     }
 
@@ -1028,6 +1110,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     setEnemies([]);
     setSpawnedCount(0);
     setWaveTimeLeft(getWaveDuration(wave));
+    playSound('waveStart');
     setIsWaveRunning(true);
     setMessage(
       isBossWave(wave)
@@ -1079,6 +1162,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
   function startCameraDrag(event: PointerEvent<HTMLDivElement>) {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (event.target instanceof HTMLElement && event.target.closest('.tile')) return;
 
     cameraDragRef.current = {
       active: true,
@@ -1097,7 +1181,11 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
     const deltaX = event.clientX - drag.startX;
     const deltaY = event.clientY - drag.startY;
-    if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+    if (Math.hypot(deltaX, deltaY) < cameraDragThreshold) {
+      return;
+    }
+
+    if (!drag.hasMoved) {
       drag.hasMoved = true;
     }
 
@@ -1621,7 +1709,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           const cellEnemies = enemiesByCell.get(cell) ?? [];
           const hitTower = towers.find((item) => item.lastTargetCell === cell && item.attackCount > 0);
           const isPath = pathCells.includes(cell);
-          const canBuild = buildCells.includes(cell);
+          const canBuild = isBuildableCell(cell);
           const isHighland = highlandCells.includes(cell);
           const isSelectedTower = tower?.id === selectedTowerId;
 

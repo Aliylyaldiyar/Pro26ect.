@@ -3407,6 +3407,7 @@ input {
   place-items: center;
   width: 62%;
   aspect-ratio: 1;
+  overflow: visible;
   border: 3px solid color-mix(in srgb, var(--era) 55%, #4a342a);
   border-radius: 50%;
   background:
@@ -3481,10 +3482,13 @@ input {
 }
 
 .tower .tower-kind-sprite {
-  position: relative;
-  z-index: 2;
-  width: 190%;
-  transform: translateY(-4px);
+  position: absolute;
+  z-index: 4;
+  width: 188%;
+  height: 188%;
+  max-width: none;
+  object-fit: contain;
+  transform: translateY(-24%);
 }
 
 .tower-arrow {
@@ -3523,8 +3527,9 @@ input {
 }
 
 .tower-slow .tower-kind-sprite {
-  width: 178%;
-  transform: translateY(-5px);
+  width: 180%;
+  height: 180%;
+  transform: translateY(-23%);
 }
 
 .tower-slow.attacking::after {
@@ -3544,8 +3549,9 @@ input {
 }
 
 .tower-blast .tower-kind-sprite {
-  width: 182%;
-  transform: translateY(-5px);
+  width: 184%;
+  height: 184%;
+  transform: translateY(-23%);
 }
 
 .tower-blast.attacking::after {
