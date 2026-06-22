@@ -65,7 +65,16 @@ type BossProfile = {
   portraitClass: string;
 };
 
-type GameScreen = 'profile' | 'tutorial' | 'start' | 'levels' | 'difficulty' | 'loadout' | 'achievements' | 'battle';
+type GameScreen =
+  | 'profile'
+  | 'tutorial'
+  | 'start'
+  | 'levels'
+  | 'difficulty'
+  | 'loadout'
+  | 'achievements'
+  | 'settings'
+  | 'battle';
 type TutorialStep = 'selectTower' | 'placeTower' | 'startWave' | 'watchWave' | 'complete';
 
 type AchievementStats = {
@@ -421,6 +430,7 @@ void mapDecorations;
 const levelMapStorageKey = 'chrono-defense-completed-levels';
 const achievementStatsStorageKey = 'chrono-defense-achievement-stats';
 const tutorialSeenStorageKey = 'chrono-defense-tutorial-seen';
+const playerNameStorageKey = 'chrono-defense-player-name';
 const tutorialBuildCell = 44;
 const movementThreshold = 8;
 const bossEnemyKindId: EasyMonsterId = 'tickingScarab';
@@ -1722,13 +1732,24 @@ function readTutorialSeen() {
   return window.localStorage.getItem(tutorialSeenStorageKey) === 'true';
 }
 
+function readSavedPlayerName() {
+  return window.localStorage.getItem(playerNameStorageKey)?.trim() ?? '';
+}
+
+function savePlayerName(name: string) {
+  const cleanName = name.trim();
+  if (cleanName) {
+    window.localStorage.setItem(playerNameStorageKey, cleanName);
+  }
+}
+
 function getAchievementProgress(achievement: Achievement, stats: AchievementStats, completedLevels: number) {
   return Math.min(achievement.goal, achievement.getProgress(stats, completedLevels));
 }
 
 export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; userId?: string }) {
   const [screen, setScreen] = useState<GameScreen>(() => (readTutorialSeen() ? 'start' : 'tutorial'));
-  const [playerName, setPlayerName] = useState('');
+  const [playerName, setPlayerName] = useState(readSavedPlayerName);
   const [playerAge, setPlayerAge] = useState('');
   const [profileError, setProfileError] = useState('');
   const [tutorialSeen, setTutorialSeen] = useState(readTutorialSeen);
@@ -1958,14 +1979,19 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     let cancelled = false;
 
     async function loadRetentionProfile() {
+      const savedName = readSavedPlayerName();
+
       if (!userId || !supabase) {
         setRetentionLoading(false);
         setRetentionProfile(refreshRetentionForToday({ ...emptyRetentionProfile, display_name: userEmail || 'Гость' }));
+        if (savedName) {
+          setPlayerName(savedName);
+        }
         return;
       }
 
       setRetentionLoading(true);
-      const fallbackName = playerName.trim() || userEmail || 'Игрок';
+      const fallbackName = playerName.trim() || savedName || userEmail || 'Игрок';
       const { data } = await supabase
         .from('retention_profiles')
         .select('user_id, display_name, xp, streak_days, last_check_in_date, best_wave, total_kills, daily_challenge_date, daily_kills, daily_waves, daily_completed, weekly_challenge_date, weekly_kills, weekly_waves, weekly_completed, monthly_challenge_date, monthly_kills, monthly_waves, monthly_completed')
@@ -1975,9 +2001,17 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       if (cancelled) return;
 
       const profile = normalizeRetentionProfile(data, fallbackName);
-      setRetentionProfile(profile);
+      const profileWithSavedName =
+        savedName && (!data?.display_name || data.display_name === 'Игрок')
+          ? { ...profile, display_name: savedName }
+          : profile;
+      setRetentionProfile(profileWithSavedName);
+      if (profileWithSavedName.display_name.trim()) {
+        setPlayerName(profileWithSavedName.display_name);
+        savePlayerName(profileWithSavedName.display_name);
+      }
       setRetentionLoading(false);
-      await supabase.from('retention_profiles').upsert(buildRetentionPayload(profile));
+      await supabase.from('retention_profiles').upsert(buildRetentionPayload(profileWithSavedName));
       await refreshLeaderboard();
     }
 
@@ -2354,6 +2388,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     }
 
     setPlayerName(cleanName);
+    savePlayerName(cleanName);
     setPlayerAge(String(age));
     activateAudio();
     updateRetentionProfile((current) => ({ ...current, display_name: cleanName }));
@@ -2377,6 +2412,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     }
 
     setPlayerName(cleanName);
+    savePlayerName(cleanName);
     updateRetentionProfile((current) => ({ ...current, display_name: cleanName }));
     setProfileError('');
     setIsEditingName(false);
@@ -3031,10 +3067,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
             <button className="secondary" type="button" onClick={() => setScreen('achievements')}>
               Достижения {completedAchievements}/{achievements.length}
             </button>
-            <button className="secondary" type="button" onClick={() => {
-              activateAudio();
-              setScreen('difficulty');
-            }}>
+            <button className="secondary" type="button" onClick={() => setScreen('settings')}>
               Настройки
             </button>
             <button className="secondary" type="button" onClick={() => setScreen('tutorial')}>
@@ -3097,6 +3130,40 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         </section>
       )}
 
+      {screen === 'settings' && (
+        <section className="achievement-screen">
+          <span className="broken-clock screen-clock achievement-clock" aria-hidden="true" />
+          <span className="time-shard achievement-shard" aria-hidden="true" />
+          <div className="screen-heading">
+            <h3>Настройки</h3>
+            <p>Здесь можно быстро вернуть камеру к стандартному виду или открыть обучение.</p>
+          </div>
+          <div className="achievement-summary">
+            <strong>{Math.round(boardZoom * 100)}%</strong>
+            <span>масштаб камеры</span>
+          </div>
+          <div className="menu-actions">
+            <button
+              type="button"
+              onClick={() => {
+                setBoardTilt(boardViewAngle);
+                setBoardTurn(358);
+                setBoardZoom(1);
+                setMessage('Камера возвращена к стандартному виду.');
+              }}
+            >
+              Сбросить камеру
+            </button>
+            <button className="secondary" type="button" onClick={() => setScreen('tutorial')}>
+              Обучение
+            </button>
+            <button className="ghost" type="button" onClick={() => setScreen('start')}>
+              Назад
+            </button>
+          </div>
+        </section>
+      )}
+
       {screen === 'levels' && (
         <section className="level-screen">
           <span className="broken-clock screen-clock level-clock" aria-hidden="true" />
@@ -3122,6 +3189,12 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                 <span className="map-route route-industrial" aria-hidden="true" />
                 <span className="map-route route-future" aria-hidden="true" />
                 <span className="map-route route-cyber" aria-hidden="true" />
+                <span className="archive-territory archive-stone" aria-hidden="true">Каменный архив</span>
+                <span className="archive-territory archive-ancient" aria-hidden="true">Античный зал</span>
+                <span className="archive-territory archive-medieval" aria-hidden="true">Замковый фонд</span>
+                <span className="archive-territory archive-industrial" aria-hidden="true">Механический сектор</span>
+                <span className="archive-territory archive-future" aria-hidden="true">Будущая витрина</span>
+                <span className="archive-territory archive-cyber" aria-hidden="true">Киберполка</span>
                 <span className="map-rift" aria-hidden="true">Разлом времени</span>
                 {levelMap.map((level) => {
                   const position = levelMapPositions[level.id];

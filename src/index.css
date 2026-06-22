@@ -8038,3 +8038,316 @@ body {
     max-height: 156px;
   }
 }
+
+/* Active time-rift background */
+.game-shell {
+  background:
+    linear-gradient(115deg, transparent 0 38%, rgba(185, 138, 74, 0.16) 38.4% 38.7%, transparent 39.1%),
+    conic-gradient(from 210deg at 50% 48%, rgba(124, 92, 252, 0.2), transparent 18%, rgba(62, 142, 106, 0.14) 34%, transparent 52%, rgba(185, 138, 74, 0.16) 72%, rgba(124, 92, 252, 0.2)),
+    linear-gradient(90deg, rgba(244, 239, 230, 0.05) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(244, 239, 230, 0.04) 1px, transparent 1px),
+    linear-gradient(135deg, #171a21, #101318 48%, #1b1824);
+  background-size: auto, auto, 38px 38px, 38px 38px, auto;
+  animation: active-time-grid 18s linear infinite;
+}
+
+.game-shell::before {
+  background:
+    repeating-linear-gradient(100deg, transparent 0 42px, rgba(185, 138, 74, 0.08) 42px 43px, transparent 43px 82px),
+    repeating-linear-gradient(8deg, transparent 0 34px, rgba(62, 142, 106, 0.05) 34px 35px, transparent 35px 76px);
+  opacity: 0.82;
+  mix-blend-mode: screen;
+  animation: active-time-flow 14s linear infinite;
+}
+
+.game-shell::after {
+  background:
+    conic-gradient(from 0deg at 52% 48%, transparent 0 22deg, rgba(185, 138, 74, 0.18) 23deg 26deg, transparent 27deg 94deg, rgba(124, 92, 252, 0.16) 95deg 98deg, transparent 99deg 360deg),
+    repeating-radial-gradient(ellipse at 52% 48%, transparent 0 72px, rgba(244, 239, 230, 0.045) 73px 75px, transparent 76px 138px);
+  opacity: 0.72;
+  animation: active-time-rings 32s linear infinite;
+}
+
+.time-atmosphere::before,
+.time-atmosphere::after {
+  content: "";
+  position: absolute;
+  inset: -18%;
+  pointer-events: none;
+}
+
+.time-atmosphere::before {
+  background:
+    linear-gradient(112deg, transparent 0 46%, rgba(244, 239, 230, 0.18) 46.3% 46.8%, rgba(185, 138, 74, 0.18) 47.2% 47.6%, transparent 48%),
+    linear-gradient(68deg, transparent 0 58%, rgba(62, 142, 106, 0.11) 58.2% 58.5%, transparent 59%);
+  opacity: 0.64;
+  filter: blur(0.4px);
+  animation: active-time-crack 11s ease-in-out infinite;
+}
+
+.time-atmosphere::after {
+  background:
+    repeating-radial-gradient(circle at 24% 18%, transparent 0 34px, rgba(185, 138, 74, 0.08) 35px 37px, transparent 38px 82px),
+    repeating-radial-gradient(circle at 78% 72%, transparent 0 42px, rgba(124, 92, 252, 0.07) 43px 45px, transparent 46px 96px);
+  opacity: 0.58;
+  animation: active-time-pulse 9s ease-in-out infinite;
+}
+
+.shell-shard-a,
+.shell-shard-b,
+.shell-shard-c {
+  animation: active-time-shard 7s ease-in-out infinite;
+}
+
+.shell-shard-b {
+  animation-delay: -2.2s;
+}
+
+.shell-shard-c {
+  animation-delay: -4.4s;
+}
+
+@keyframes active-time-grid {
+  from {
+    background-position: 0 0, 0 0, 0 0, 0 0, 0 0;
+  }
+
+  to {
+    background-position: 0 0, 0 0, 38px 19px, -19px 38px, 0 0;
+  }
+}
+
+@keyframes active-time-flow {
+  from {
+    transform: translate3d(-2%, -1%, 0);
+  }
+
+  to {
+    transform: translate3d(2%, 1%, 0);
+  }
+}
+
+@keyframes active-time-rings {
+  from {
+    transform: rotate(0deg) scale(1.04);
+  }
+
+  to {
+    transform: rotate(360deg) scale(1.04);
+  }
+}
+
+@keyframes active-time-crack {
+  0%,
+  100% {
+    transform: translateX(-4%) skewX(-6deg);
+    opacity: 0.36;
+  }
+
+  45% {
+    transform: translateX(4%) skewX(4deg);
+    opacity: 0.78;
+  }
+}
+
+@keyframes active-time-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.38;
+  }
+
+  50% {
+    transform: scale(1.05);
+    opacity: 0.66;
+  }
+}
+
+@keyframes active-time-shard {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+
+  50% {
+    filter: brightness(1.35);
+  }
+}
+
+/* Colorful unexplored archive territories for the level map */
+.level-screen {
+  background:
+    radial-gradient(circle at 12% 12%, rgba(200, 167, 106, 0.18), transparent 24%),
+    radial-gradient(circle at 84% 18%, rgba(78, 129, 153, 0.16), transparent 26%),
+    linear-gradient(180deg, rgba(252, 251, 248, 0.98), rgba(238, 229, 217, 0.94));
+}
+
+.level-map-layout {
+  background:
+    linear-gradient(135deg, rgba(84, 62, 38, 0.16), rgba(124, 92, 252, 0.12)),
+    #d9cdb8;
+}
+
+.level-map {
+  overflow: hidden;
+  filter: saturate(1.08) contrast(1.02);
+  background:
+    radial-gradient(ellipse at 18% 18%, rgba(124, 106, 79, 0.78), transparent 24%),
+    radial-gradient(ellipse at 78% 16%, rgba(200, 167, 106, 0.78), transparent 24%),
+    radial-gradient(ellipse at 80% 48%, rgba(94, 109, 130, 0.76), transparent 25%),
+    radial-gradient(ellipse at 78% 78%, rgba(107, 86, 71, 0.78), transparent 24%),
+    radial-gradient(ellipse at 20% 78%, rgba(78, 129, 153, 0.72), transparent 25%),
+    radial-gradient(ellipse at 17% 47%, rgba(92, 75, 138, 0.78), transparent 24%),
+    radial-gradient(circle at 50% 50%, rgba(124, 92, 252, 0.38), transparent 22%),
+    linear-gradient(135deg, #d9cfbd, #c4b6a0 52%, #d8ccb8);
+}
+
+.level-map::before {
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0 17%, rgba(76, 50, 133, 0.2) 17.3% 18.1%, transparent 18.5% 31%, rgba(185, 138, 74, 0.16) 31.4% 32%, transparent 32.5%),
+    conic-gradient(from 0deg at 50% 50%, rgba(58, 45, 32, 0.14) 0 1.2deg, transparent 1.2deg 26deg);
+  opacity: 0.9;
+}
+
+.level-map::after {
+  background:
+    linear-gradient(110deg, transparent 0 24%, rgba(255, 255, 255, 0.24) 24.4% 24.8%, transparent 25.2%),
+    linear-gradient(18deg, transparent 0 58%, rgba(87, 68, 45, 0.16) 58.3% 58.8%, transparent 59.2%);
+  opacity: 0.72;
+}
+
+.archive-territory {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: clamp(140px, 16vw, 230px);
+  min-height: clamp(62px, 8vw, 96px);
+  border: 1px solid rgba(252, 251, 248, 0.34);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: rgba(252, 251, 248, 0.9);
+  font-size: clamp(10px, 0.78vw, 13px);
+  font-weight: 950;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 0 2px 8px rgba(20, 16, 12, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 16px 34px rgba(30, 22, 16, 0.18);
+  transform: rotate(var(--territory-tilt, -2deg));
+  pointer-events: none;
+}
+
+.archive-territory::before {
+  content: "неизведано";
+  position: absolute;
+  left: 10px;
+  top: 8px;
+  color: rgba(252, 251, 248, 0.64);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+.archive-stone {
+  --territory-tilt: -4deg;
+  left: 9%;
+  top: 12%;
+  background: linear-gradient(135deg, rgba(124, 106, 79, 0.82), rgba(73, 61, 45, 0.72));
+}
+
+.archive-ancient {
+  --territory-tilt: 3deg;
+  right: 11%;
+  top: 10%;
+  background: linear-gradient(135deg, rgba(205, 158, 76, 0.86), rgba(112, 75, 44, 0.7));
+}
+
+.archive-medieval {
+  --territory-tilt: -2deg;
+  right: 7%;
+  top: 38%;
+  background: linear-gradient(135deg, rgba(94, 109, 130, 0.86), rgba(46, 58, 82, 0.72));
+}
+
+.archive-industrial {
+  --territory-tilt: 2deg;
+  right: 10%;
+  bottom: 15%;
+  background: linear-gradient(135deg, rgba(126, 87, 62, 0.88), rgba(67, 52, 43, 0.76));
+}
+
+.archive-future {
+  --territory-tilt: 2deg;
+  left: 12%;
+  bottom: 18%;
+  background: linear-gradient(135deg, rgba(78, 129, 153, 0.86), rgba(38, 89, 104, 0.72));
+}
+
+.archive-cyber {
+  --territory-tilt: -2deg;
+  left: 8%;
+  top: 38%;
+  background: linear-gradient(135deg, rgba(92, 75, 138, 0.9), rgba(49, 40, 91, 0.76));
+}
+
+.map-route {
+  z-index: 6;
+  height: 5px;
+  opacity: 0.82;
+  background: linear-gradient(90deg, transparent, rgba(255, 236, 170, 0.92), rgba(124, 92, 252, 0.56), transparent);
+  box-shadow: 0 0 18px rgba(185, 138, 74, 0.26);
+}
+
+.level-node {
+  z-index: 8;
+  border-color: rgba(252, 251, 248, 0.36);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--node-accent, #b98a4a) 68%, transparent) 0 7px, transparent 7px),
+    radial-gradient(circle at 12% 50%, color-mix(in srgb, var(--node-accent, #b98a4a) 24%, transparent), transparent 32%),
+    rgba(20, 24, 29, 0.92);
+}
+
+.level-node.stone { --node-accent: #d7b56f; }
+.level-node.ancient { --node-accent: #f0b65f; }
+.level-node.medieval { --node-accent: #8ea9d9; }
+.level-node.industrial { --node-accent: #cf8a5c; }
+.level-node.future { --node-accent: #5ec8d6; }
+.level-node.cyber { --node-accent: #9b78ff; }
+
+.level-node.completed,
+.level-node:hover,
+.level-node.active {
+  filter: none;
+  border-color: color-mix(in srgb, var(--node-accent, #b98a4a) 70%, #ffffff);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--node-accent, #b98a4a) 28%, transparent),
+    0 18px 34px rgba(18, 13, 9, 0.32);
+}
+
+.level-node.locked {
+  filter: saturate(0.92) brightness(0.96);
+}
+
+.level-number {
+  background:
+    radial-gradient(circle at 34% 28%, #fff6d8, color-mix(in srgb, var(--node-accent, #b98a4a) 72%, #4e3c2a) 68%);
+}
+
+.map-rift {
+  z-index: 10;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(155, 120, 255, 0.92), rgba(44, 26, 80, 0.95) 58%, rgba(16, 10, 26, 0.9));
+  box-shadow:
+    0 0 0 8px rgba(155, 120, 255, 0.14),
+    0 0 38px rgba(155, 120, 255, 0.38),
+    0 18px 34px rgba(13, 8, 26, 0.34);
+}
+
+@media (max-width: 900px) {
+  .archive-territory {
+    width: 120px;
+    min-height: 54px;
+    font-size: 9px;
+  }
+}

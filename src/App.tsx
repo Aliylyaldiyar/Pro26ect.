@@ -7,7 +7,7 @@ import { TimeTowerDefense } from './components/TimeTowerDefense';
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(isSupabaseReady);
-  const [guestMode, setGuestMode] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
 
   useEffect(() => {
     if (!supabase) return;
@@ -19,6 +19,9 @@ export default function App() {
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
+      if (nextSession) {
+        setAuthOpen(false);
+      }
     });
 
     return () => sub.subscription.unsubscribe();
@@ -32,15 +35,15 @@ export default function App() {
     );
   }
 
-  if (guestMode) {
+  if (!session && authOpen) {
     return (
       <main className="container">
         <header className="header">
-          <button className="ghost" onClick={() => setGuestMode(false)}>
-            Войти
+          <button className="ghost" onClick={() => setAuthOpen(false)}>
+            Назад к игре
           </button>
         </header>
-        <TimeTowerDefense userEmail="Гость" />
+        <Auth onPlayAsGuest={() => setAuthOpen(false)} />
       </main>
     );
   }
@@ -48,17 +51,21 @@ export default function App() {
   return (
     <main className="container">
       <header className="header">
-        {session && (
+        {session ? (
           <button className="ghost" onClick={() => supabase?.auth.signOut()}>
             Выйти
+          </button>
+        ) : (
+          <button className="ghost" onClick={() => setAuthOpen(true)}>
+            Войти
           </button>
         )}
       </header>
 
-      {!session ? (
-        <Auth onPlayAsGuest={() => setGuestMode(true)} />
-      ) : (
+      {session ? (
         <TimeTowerDefense userEmail={session.user.email ?? ''} userId={session.user.id} />
+      ) : (
+        <TimeTowerDefense userEmail="Гость" />
       )}
     </main>
   );
