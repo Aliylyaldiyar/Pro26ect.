@@ -36,7 +36,6 @@ export default function App() {
     return (
       <main className="container">
         <header className="header">
-          <h1>Chrono Defense</h1>
           <button className="ghost" onClick={() => setGuestMode(false)}>
             Войти
           </button>
@@ -49,7 +48,6 @@ export default function App() {
   return (
     <main className="container">
       <header className="header">
-        <h1>Chrono Defense</h1>
         {session && (
           <button className="ghost" onClick={() => supabase?.auth.signOut()}>
             Выйти
@@ -57,7 +55,11 @@ export default function App() {
         )}
       </header>
 
-      {!session ? <Auth onPlayAsGuest={() => setGuestMode(true)} /> : <TimeTowerDefense userEmail={session.user.email ?? ''} />}
+      {!session ? (
+        <Auth onPlayAsGuest={() => setGuestMode(true)} />
+      ) : (
+        <TimeTowerDefense userEmail={session.user.email ?? ''} userId={session.user.id} />
+      )}
     </main>
   );
 }

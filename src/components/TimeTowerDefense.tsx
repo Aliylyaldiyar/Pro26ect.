@@ -65,7 +65,29 @@ type BossProfile = {
   portraitClass: string;
 };
 
-type GameScreen = 'profile' | 'start' | 'levels' | 'difficulty' | 'loadout' | 'battle';
+type GameScreen = 'profile' | 'tutorial' | 'start' | 'levels' | 'difficulty' | 'loadout' | 'achievements' | 'battle';
+type TutorialStep = 'selectTower' | 'placeTower' | 'startWave' | 'watchWave' | 'complete';
+
+type AchievementStats = {
+  totalKills: number;
+  wavesCompleted: number;
+  towersBuilt: number;
+  upgradesBought: number;
+  bossesDefeated: number;
+  maxWaveReached: number;
+  hardVictories: number;
+  antiTimeVictories: number;
+  noDamageVictories: number;
+  noSkipVictories: number;
+};
+
+type Achievement = {
+  id: string;
+  title: string;
+  description: string;
+  goal: number;
+  getProgress: (stats: AchievementStats, completedLevels: number) => number;
+};
 
 type LevelMapItem = {
   id: number;
@@ -130,6 +152,16 @@ type BattleDecoration = LevelMapPoint & {
   spanY?: number;
 };
 
+type BattleMapLayout = {
+  id: number;
+  name: string;
+  description: string;
+  pathCells: number[];
+  buildCells: number[];
+  highlandCells: number[];
+  decorations: BattleDecoration[];
+};
+
 type Enemy = {
   id: number;
   kind: EasyMonsterId;
@@ -181,6 +213,55 @@ type AiFunctionResponse = {
   text?: string;
 };
 
+type BackgroundMusicEngine = {
+  master: GainNode;
+  filter: BiquadFilterNode;
+  delay: DelayNode;
+  feedback: GainNode;
+  drones: OscillatorNode[];
+  timers: number[];
+  tempo: number;
+  paused: boolean;
+};
+
+type RetentionProfile = {
+  user_id: string;
+  display_name: string;
+  xp: number;
+  streak_days: number;
+  last_check_in_date: string | null;
+  best_wave: number;
+  total_kills: number;
+  daily_challenge_date: string | null;
+  daily_kills: number;
+  daily_waves: number;
+  daily_completed: boolean;
+  weekly_challenge_date: string | null;
+  weekly_kills: number;
+  weekly_waves: number;
+  weekly_completed: boolean;
+  monthly_challenge_date: string | null;
+  monthly_kills: number;
+  monthly_waves: number;
+  monthly_completed: boolean;
+};
+
+type RetentionLeaderboardEntry = {
+  display_name: string;
+  xp: number;
+  streak_days: number;
+  best_wave: number;
+  total_kills: number;
+};
+
+type DailyChallenge = {
+  title: string;
+  description: string;
+  goal: number;
+  rewardXp: number;
+  getProgress: (profile: RetentionProfile) => number;
+};
+
 const boardSize = 10;
 const maxTowerLevel = 3;
 const maxWaves = 40;
@@ -196,6 +277,89 @@ const cameraDragThreshold = 8;
 const pathCells = [0, 1, 2, 3, 13, 23, 33, 34, 35, 45, 55, 65, 64, 63, 73, 83, 84, 85, 86, 96, 97, 98, 99];
 const buildCells = [11, 12, 14, 21, 22, 24, 31, 32, 36, 37, 42, 43, 44, 46, 47, 54, 56, 57, 62, 66, 67, 72, 74, 75, 82, 87, 88, 92, 93, 94, 95];
 const highlandCells = [12, 24, 36, 47, 62, 74, 88, 94];
+
+const battleMaps: BattleMapLayout[] = [
+  {
+    id: 1,
+    name: 'Каменный зигзаг',
+    description: 'Длинная учебная дорога с удобными платформами у поворотов.',
+    pathCells,
+    buildCells,
+    highlandCells,
+    decorations: [
+      { kind: 'mammoth', x: 8, y: 1, spanX: 2, spanY: 2 },
+      { kind: 'hut', x: 1, y: 8, spanX: 2, spanY: 2 },
+      { kind: 'volcano', x: 9, y: 6, spanX: 2, spanY: 3 },
+      { kind: 'rockPile', x: 1, y: 5, spanX: 2, spanY: 2 },
+    ],
+  },
+  {
+    id: 2,
+    name: 'Античная петля',
+    description: 'Маршрут обходит центр, поэтому башни в середине держат сразу две стороны.',
+    pathCells: [4, 14, 24, 34, 44, 43, 42, 41, 40, 50, 60, 70, 71, 72, 73, 74, 75, 65, 55, 56, 57, 58, 59, 69, 79, 89, 99],
+    buildCells: [2, 3, 5, 6, 13, 15, 22, 23, 25, 26, 31, 32, 35, 36, 45, 46, 47, 51, 52, 53, 61, 62, 63, 64, 76, 77, 78, 86, 87, 88, 95, 96],
+    highlandCells: [23, 35, 46, 62, 76, 87],
+    decorations: [
+      { kind: 'watchTower', x: 1, y: 1, spanX: 2, spanY: 3 },
+      { kind: 'house', x: 7, y: 2, spanX: 2, spanY: 2 },
+      { kind: 'mountain', x: 7, y: 7, spanX: 3, spanY: 2 },
+    ],
+  },
+  {
+    id: 3,
+    name: 'Ворота замка',
+    description: 'Две длинные прямые заставляют комбинировать быстрый урон и замедление.',
+    pathCells: [90, 80, 70, 60, 50, 40, 30, 31, 32, 33, 34, 35, 36, 46, 56, 66, 76, 77, 78, 79, 89, 99],
+    buildCells: [81, 82, 83, 91, 92, 93, 51, 52, 53, 41, 42, 43, 24, 25, 26, 37, 47, 57, 67, 68, 69, 84, 85, 86, 94, 95, 96],
+    highlandCells: [42, 52, 68, 84, 95],
+    decorations: [
+      { kind: 'watchTower', x: 1, y: 1, spanX: 2, spanY: 3 },
+      { kind: 'house', x: 1, y: 8, spanX: 2, spanY: 2 },
+      { kind: 'mountain', x: 6, y: 1, spanX: 3, spanY: 2 },
+    ],
+  },
+  {
+    id: 4,
+    name: 'Паровой район',
+    description: 'Короткие повороты и тесные платформы проверяют точность расстановки.',
+    pathCells: [9, 8, 7, 17, 27, 26, 25, 35, 45, 44, 43, 53, 63, 64, 65, 75, 85, 84, 83, 82, 92, 91, 90],
+    buildCells: [5, 6, 16, 18, 24, 28, 34, 36, 37, 42, 46, 47, 52, 54, 55, 62, 66, 67, 72, 73, 74, 76, 81, 86, 93, 94, 95],
+    highlandCells: [18, 36, 47, 62, 73, 86],
+    decorations: [
+      { kind: 'mineCart', x: 1, y: 8, spanX: 2, spanY: 2 },
+      { kind: 'pipe', x: 9, y: 3, spanX: 2, spanY: 3 },
+      { kind: 'factoryBlock', x: 6, y: 1, spanX: 2, spanY: 2 },
+    ],
+  },
+  {
+    id: 5,
+    name: 'Разлом секунд',
+    description: 'Дорога пересекает почти всё поле, а сильные позиции стоят далеко друг от друга.',
+    pathCells: [10, 11, 12, 22, 32, 33, 34, 35, 25, 15, 16, 17, 27, 37, 47, 57, 56, 55, 65, 75, 76, 77, 87, 97, 98, 99],
+    buildCells: [0, 1, 2, 13, 14, 20, 21, 23, 24, 26, 31, 36, 41, 42, 43, 44, 45, 46, 52, 53, 54, 58, 59, 64, 66, 67, 74, 78, 84, 85, 86, 88, 94, 95, 96],
+    highlandCells: [14, 24, 43, 54, 67, 85, 96],
+    decorations: [
+      { kind: 'drone', x: 9, y: 1, spanX: 2, spanY: 2 },
+      { kind: 'reactor', x: 1, y: 8, spanX: 2, spanY: 2 },
+      { kind: 'energyPylon', x: 9, y: 5, spanX: 2, spanY: 3 },
+    ],
+  },
+  {
+    id: 6,
+    name: 'Финальный портал',
+    description: 'Самая длинная пробежка: центр силён, но фланги легко проваливаются.',
+    pathCells: [5, 15, 25, 24, 23, 22, 32, 42, 52, 53, 54, 55, 56, 46, 36, 37, 38, 48, 58, 68, 67, 66, 76, 86, 96, 97, 98, 99],
+    buildCells: [3, 4, 6, 7, 13, 14, 16, 17, 21, 26, 27, 31, 33, 34, 35, 41, 43, 44, 45, 51, 57, 61, 62, 63, 64, 65, 69, 75, 77, 85, 87, 94, 95],
+    highlandCells: [14, 34, 45, 57, 64, 77, 95],
+    decorations: [
+      { kind: 'drone', x: 9, y: 1, spanX: 2, spanY: 2 },
+      { kind: 'reactor', x: 1, y: 8, spanX: 2, spanY: 2 },
+      { kind: 'energyPylon', x: 9, y: 5, spanX: 2, spanY: 3 },
+      { kind: 'pipe', x: 1, y: 1, spanX: 2, spanY: 3 },
+    ],
+  },
+];
 
 const levelMap: LevelMapItem[] = [
   { id: 1, title: 'Искра времени', mapTitle: 'Каменный век', mapArea: 'stone', chapter: 'Обучение', startWave: 1, description: 'Первые башни и спокойные враги.' },
@@ -254,24 +418,177 @@ const mapDecorations: MapDecoration[] = [
 
 void mapDecorations;
 
-const battleDecorations: BattleDecoration[] = [
-  { kind: 'mammoth', x: 8, y: 1, spanX: 2, spanY: 2 },
-  { kind: 'hut', x: 1, y: 8, spanX: 2, spanY: 2 },
-  { kind: 'volcano', x: 9, y: 6, spanX: 2, spanY: 3 },
-  { kind: 'rockPile', x: 1, y: 5, spanX: 2, spanY: 2 },
-  { kind: 'watchTower', x: 9, y: 1, spanX: 2, spanY: 3 },
-  { kind: 'house', x: 1, y: 9, spanX: 2, spanY: 2 },
-  { kind: 'mountain', x: 6, y: 1, spanX: 3, spanY: 2 },
-  { kind: 'mineCart', x: 1, y: 8, spanX: 2, spanY: 2 },
-  { kind: 'pipe', x: 9, y: 3, spanX: 2, spanY: 3 },
-  { kind: 'factoryBlock', x: 6, y: 1, spanX: 2, spanY: 2 },
-  { kind: 'drone', x: 9, y: 1, spanX: 2, spanY: 2 },
-  { kind: 'reactor', x: 1, y: 8, spanX: 2, spanY: 2 },
-  { kind: 'energyPylon', x: 9, y: 5, spanX: 2, spanY: 3 },
-];
 const levelMapStorageKey = 'chrono-defense-completed-levels';
+const achievementStatsStorageKey = 'chrono-defense-achievement-stats';
+const tutorialSeenStorageKey = 'chrono-defense-tutorial-seen';
+const tutorialBuildCell = 44;
 const movementThreshold = 8;
 const bossEnemyKindId: EasyMonsterId = 'tickingScarab';
+const baseLevelXp = 120;
+
+const emptyRetentionProfile: RetentionProfile = {
+  user_id: '',
+  display_name: 'Игрок',
+  xp: 0,
+  streak_days: 0,
+  last_check_in_date: null,
+  best_wave: 0,
+  total_kills: 0,
+  daily_challenge_date: null,
+  daily_kills: 0,
+  daily_waves: 0,
+  daily_completed: false,
+  weekly_challenge_date: null,
+  weekly_kills: 0,
+  weekly_waves: 0,
+  weekly_completed: false,
+  monthly_challenge_date: null,
+  monthly_kills: 0,
+  monthly_waves: 0,
+  monthly_completed: false,
+};
+
+const emptyAchievementStats: AchievementStats = {
+  totalKills: 0,
+  wavesCompleted: 0,
+  towersBuilt: 0,
+  upgradesBought: 0,
+  bossesDefeated: 0,
+  maxWaveReached: 0,
+  hardVictories: 0,
+  antiTimeVictories: 0,
+  noDamageVictories: 0,
+  noSkipVictories: 0,
+};
+
+const achievements: Achievement[] = [
+  {
+    id: 'first-defense',
+    title: 'Первая линия',
+    description: 'Поставь первую башню.',
+    goal: 1,
+    getProgress: (stats) => stats.towersBuilt,
+  },
+  {
+    id: 'builder',
+    title: 'Архитектор времени',
+    description: 'Построй 10 башен за все игры.',
+    goal: 10,
+    getProgress: (stats) => stats.towersBuilt,
+  },
+  {
+    id: 'first-wave',
+    title: 'Волна отбита',
+    description: 'Пройди первую волну.',
+    goal: 1,
+    getProgress: (stats) => stats.wavesCompleted,
+  },
+  {
+    id: 'wave-master',
+    title: 'Держатель линии',
+    description: 'Отбей 10 волн.',
+    goal: 10,
+    getProgress: (stats) => stats.wavesCompleted,
+  },
+  {
+    id: 'hunter',
+    title: 'Охотник на разломы',
+    description: 'Победи 50 мобов.',
+    goal: 50,
+    getProgress: (stats) => stats.totalKills,
+  },
+  {
+    id: 'chronoslayer',
+    title: 'Хроно-истребитель',
+    description: 'Победи 200 мобов.',
+    goal: 200,
+    getProgress: (stats) => stats.totalKills,
+  },
+  {
+    id: 'upgrader',
+    title: 'Мастер улучшений',
+    description: 'Улучши башни 8 раз.',
+    goal: 8,
+    getProgress: (stats) => stats.upgradesBought,
+  },
+  {
+    id: 'boss-breaker',
+    title: 'Разбить хрономанта',
+    description: 'Победи босса.',
+    goal: 1,
+    getProgress: (stats) => stats.bossesDefeated,
+  },
+  {
+    id: 'map-runner',
+    title: 'Путешественник эпох',
+    description: 'Пройди 3 уровня на карте.',
+    goal: 3,
+    getProgress: (_stats, completedLevels) => completedLevels,
+  },
+  {
+    id: 'hardtry-wave-30',
+    title: 'Hardtry: 30-я волна',
+    description: 'Дойди до 30-й волны в любой игре.',
+    goal: 30,
+    getProgress: (stats) => stats.maxWaveReached,
+  },
+  {
+    id: 'hardtry-killer',
+    title: 'Hardtry: тысяча разломов',
+    description: 'Победи 1000 мобов за все игры.',
+    goal: 1000,
+    getProgress: (stats) => stats.totalKills,
+  },
+  {
+    id: 'hardtry-architect',
+    title: 'Hardtry: инженер эпох',
+    description: 'Построй 100 башен за все игры.',
+    goal: 100,
+    getProgress: (stats) => stats.towersBuilt,
+  },
+  {
+    id: 'hardtry-upgrades',
+    title: 'Hardtry: максимум мощности',
+    description: 'Купи 75 улучшений башен.',
+    goal: 75,
+    getProgress: (stats) => stats.upgradesBought,
+  },
+  {
+    id: 'hardtry-boss-hunter',
+    title: 'Hardtry: охотник на боссов',
+    description: 'Победи 5 боссов.',
+    goal: 5,
+    getProgress: (stats) => stats.bossesDefeated,
+  },
+  {
+    id: 'hardtry-hard-mode',
+    title: 'Hardtry: разрыв закрыт',
+    description: 'Победи на сложности «Разрыв».',
+    goal: 1,
+    getProgress: (stats) => stats.hardVictories,
+  },
+  {
+    id: 'hardtry-antitime',
+    title: 'Hardtry: антивремя сломано',
+    description: 'Победи на сложности «Антивремя».',
+    goal: 1,
+    getProgress: (stats) => stats.antiTimeVictories,
+  },
+  {
+    id: 'hardtry-perfect',
+    title: 'Hardtry: идеальная линия',
+    description: 'Победи, не получив урона по базе.',
+    goal: 1,
+    getProgress: (stats) => stats.noDamageVictories,
+  },
+  {
+    id: 'hardtry-no-skip',
+    title: 'Hardtry: ни секунды назад',
+    description: 'Победи, ни разу не пропустив волну.',
+    goal: 1,
+    getProgress: (stats) => stats.noSkipVictories,
+  },
+];
 const aiCommentatorSystem =
   'Ты ИИ-комментатор tower defense игры. Пиши по-русски, 1 короткое предложение до 120 символов. Не называй врагов, существ, монстров, боссов и их типы прямо. Только намекай на способности и советуй стиль защиты.';
 
@@ -423,7 +740,7 @@ const eras: Era[] = [
   {
     name: 'Каменный век',
     year: '10 000 до н.э.',
-    accent: '#9a6b3f',
+    accent: '#7C6A4F',
     ground: 'stone',
     enemy: 'M',
     tower: 'A',
@@ -432,7 +749,7 @@ const eras: Era[] = [
   {
     name: 'Средневековье',
     year: '1382',
-    accent: '#7b6bb8',
+    accent: '#5E6D82',
     ground: 'castle',
     enemy: 'K',
     tower: 'C',
@@ -441,7 +758,7 @@ const eras: Era[] = [
   {
     name: 'Индустриальная эпоха',
     year: '1899',
-    accent: '#4d7c8a',
+    accent: '#6B5647',
     ground: 'factory',
     enemy: 'D',
     tower: 'G',
@@ -450,7 +767,7 @@ const eras: Era[] = [
   {
     name: 'Будущее',
     year: '2147',
-    accent: '#d95f59',
+    accent: '#4E8199',
     ground: 'future',
     enemy: 'R',
     tower: 'L',
@@ -733,8 +1050,8 @@ function getLevelMapCellClass(cell: number) {
 
 void getLevelMapCellClass;
 
-function getEnemyCell(enemy: Enemy) {
-  return pathCells[Math.min(enemy.step, pathCells.length - 1)];
+function getEnemyCell(enemy: Enemy, activePathCells = pathCells) {
+  return activePathCells[Math.min(enemy.step, activePathCells.length - 1)];
 }
 
 function getEnemyKind(kind: EasyMonsterId) {
@@ -856,24 +1173,24 @@ function getDamageAfterResistance(enemy: Enemy, towerKind: TowerKind['id'], dama
   return damage;
 }
 
-function getTowerSlowMultiplier(tower: Tower, enemies: Enemy[], now: number) {
+function getTowerSlowMultiplier(tower: Tower, enemies: Enemy[], now: number, activePathCells = pathCells) {
   if (enemies.some((enemy) => enemy.isBoss && enemy.towerSlowUntil > now)) return 3.4;
 
-  return enemies.some((enemy) => enemy.kind === 'slowedWolf' && enemy.towerSlowUntil > now && distanceBetweenCells(tower.cell, getEnemyCell(enemy)) <= 1.8)
+  return enemies.some((enemy) => enemy.kind === 'slowedWolf' && enemy.towerSlowUntil > now && distanceBetweenCells(tower.cell, getEnemyCell(enemy, activePathCells)) <= 1.8)
     ? 1.1
     : 1;
 }
 
-function isBuildableCell(cell: number) {
-  return buildCells.includes(cell);
+function isBuildableCell(cell: number, activeBuildCells = buildCells) {
+  return activeBuildCells.includes(cell);
 }
 
-function getTileDetailClass(cell: number) {
-  if (cell === pathCells[0]) return 'start-gate';
-  if (cell === pathCells[pathCells.length - 1]) return 'time-portal';
-  if (pathCells.includes(cell)) return cell % 2 === 0 ? 'path-stones' : 'path-dust';
-  if (highlandCells.includes(cell)) return 'build-highland';
-  if (buildCells.includes(cell)) return cell % 3 === 0 ? 'build-plate' : 'build-grass';
+function getTileDetailClass(cell: number, activeMap: BattleMapLayout = battleMaps[0]) {
+  if (cell === activeMap.pathCells[0]) return 'start-gate';
+  if (cell === activeMap.pathCells[activeMap.pathCells.length - 1]) return 'time-portal';
+  if (activeMap.pathCells.includes(cell)) return cell % 2 === 0 ? 'path-stones' : 'path-dust';
+  if (activeMap.highlandCells.includes(cell)) return 'build-highland';
+  if (activeMap.buildCells.includes(cell)) return cell % 3 === 0 ? 'build-plate' : 'build-grass';
   if (cell % 11 === 0 || cell % 17 === 0) return 'terrain-rocks';
   if (cell % 7 === 0) return 'terrain-flowers';
   return cell % 5 === 0 ? 'terrain-grass' : 'terrain-soft';
@@ -935,10 +1252,10 @@ function getForgeCooldownMultiplier(tower: Tower, towers: Tower[]) {
   return Math.max(0.68, 0.88 - (nearbyForge.level - 1) * 0.05);
 }
 
-function getArchiveRewardBonus(enemy: Enemy, towers: Tower[]) {
+function getArchiveRewardBonus(enemy: Enemy, towers: Tower[], activePathCells = pathCells) {
   const archive = towers
     .filter((tower) => tower.kind === 'archive')
-    .find((tower) => distanceBetweenCells(tower.cell, getEnemyCell(enemy)) <= getTowerStats(tower).range);
+    .find((tower) => distanceBetweenCells(tower.cell, getEnemyCell(enemy, activePathCells)) <= getTowerStats(tower).range);
 
   if (!archive) return 0;
 
@@ -965,8 +1282,8 @@ function renderTowerMark(tower: TowerKind | null, fallback = '+') {
   return <img className="tower-kind-sprite" src={tower.sprite} alt="" draggable={false} />;
 }
 
-function chooseTowerTarget(tower: Tower, enemies: Enemy[], range: number) {
-  const targets = enemies.filter((enemy) => distanceBetweenCells(tower.cell, getEnemyCell(enemy)) <= range);
+function chooseTowerTarget(tower: Tower, enemies: Enemy[], range: number, activePathCells = pathCells) {
+  const targets = enemies.filter((enemy) => distanceBetweenCells(tower.cell, getEnemyCell(enemy, activePathCells)) <= range);
 
   if (tower.targetPriority === 'strongest') {
     return targets.sort((a, b) => b.hp - a.hp || b.step - a.step || Number(b.isBoss) - Number(a.isBoss))[0];
@@ -979,15 +1296,15 @@ function chooseTowerTarget(tower: Tower, enemies: Enemy[], range: number) {
   return targets.sort((a, b) => b.step - a.step || Number(b.isBoss) - Number(a.isBoss))[0];
 }
 
-function getTowerSplashTargets(tower: Tower, target: Enemy, enemies: Enemy[]) {
+function getTowerSplashTargets(tower: Tower, target: Enemy, enemies: Enemy[], activePathCells = pathCells) {
   if (tower.kind === 'pulsar') {
-    const targetCell = getEnemyCell(target);
-    return enemies.filter((enemy) => getEnemyCell(enemy) === targetCell);
+    const targetCell = getEnemyCell(target, activePathCells);
+    return enemies.filter((enemy) => getEnemyCell(enemy, activePathCells) === targetCell);
   }
 
   if (tower.kind === 'rift' || tower.kind === 'mirror') {
     const splashRange = tower.kind === 'rift' ? 1.15 + tower.level * 0.12 : 0.95 + tower.level * 0.1;
-    return enemies.filter((enemy) => distanceBetweenCells(getEnemyCell(target), getEnemyCell(enemy)) <= splashRange);
+    return enemies.filter((enemy) => distanceBetweenCells(getEnemyCell(target, activePathCells), getEnemyCell(enemy, activePathCells)) <= splashRange);
   }
 
   return [target];
@@ -1022,6 +1339,170 @@ function playTone(
   gain.connect(audioContext.destination);
   oscillator.start(startTime);
   oscillator.stop(startTime + duration + 0.03);
+}
+
+function playMusicNote(
+  audioContext: AudioContext,
+  destination: AudioNode,
+  frequency: number,
+  duration: number,
+  volume: number,
+) {
+  const now = audioContext.currentTime;
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+
+  oscillator.type = Math.random() > 0.58 ? 'triangle' : 'sine';
+  oscillator.frequency.setValueAtTime(frequency, now);
+  oscillator.detune.setValueAtTime((Math.random() - 0.5) * 18, now);
+
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(volume, now + 0.08);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+  oscillator.connect(gain);
+  gain.connect(destination);
+  oscillator.start(now);
+  oscillator.stop(now + duration + 0.05);
+}
+
+function createBackgroundMusic(audioContext: AudioContext) {
+  const master = audioContext.createGain();
+  const filter = audioContext.createBiquadFilter();
+  const delay = audioContext.createDelay();
+  const feedback = audioContext.createGain();
+  const droneGain = audioContext.createGain();
+  const baseFrequencies = [55, 82.41, 110];
+  const drones = baseFrequencies.map((frequency, index) => {
+    const oscillator = audioContext.createOscillator();
+    oscillator.type = index === 1 ? 'triangle' : 'sine';
+    oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+    oscillator.detune.setValueAtTime(index === 2 ? -9 : 6, audioContext.currentTime);
+    oscillator.connect(droneGain);
+    oscillator.start();
+    return oscillator;
+  });
+
+  master.gain.setValueAtTime(0.0001, audioContext.currentTime);
+  master.gain.exponentialRampToValueAtTime(0.34, audioContext.currentTime + 1.2);
+  droneGain.gain.setValueAtTime(0.095, audioContext.currentTime);
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(760, audioContext.currentTime);
+  filter.Q.setValueAtTime(7.5, audioContext.currentTime);
+  delay.delayTime.setValueAtTime(0.34, audioContext.currentTime);
+  feedback.gain.setValueAtTime(0.24, audioContext.currentTime);
+
+  droneGain.connect(filter);
+  filter.connect(delay);
+  filter.connect(master);
+  delay.connect(feedback);
+  feedback.connect(delay);
+  delay.connect(master);
+  master.connect(audioContext.destination);
+
+  return {
+    master,
+    filter,
+    delay,
+    feedback,
+    drones,
+    timers: [],
+    tempo: 1,
+    paused: false,
+  };
+}
+
+function playMusicPulse(audioContext: AudioContext, destination: AudioNode, frequency: number, volume: number) {
+  const now = audioContext.currentTime;
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+
+  oscillator.type = 'square';
+  oscillator.frequency.setValueAtTime(frequency, now);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(volume, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+
+  oscillator.connect(gain);
+  gain.connect(destination);
+  oscillator.start(now);
+  oscillator.stop(now + 0.16);
+}
+
+function scheduleBackgroundMusic(audioContext: AudioContext, engine: BackgroundMusicEngine) {
+  const scale = [55, 61.74, 65.41, 82.41, 98, 110, 123.47, 130.81, 164.81, 196];
+  const timer = window.setTimeout(() => {
+    if (!engine.master.context) return;
+
+    if (Math.random() < 0.1) {
+      engine.tempo = clamp(engine.tempo + (Math.random() - 0.5) * 0.42, 0.62, 1.55);
+    }
+
+    if (!engine.paused && Math.random() < 0.075) {
+      engine.paused = true;
+      const now = audioContext.currentTime;
+      engine.master.gain.cancelScheduledValues(now);
+      engine.master.gain.setValueAtTime(Math.max(engine.master.gain.value, 0.0001), now);
+      engine.master.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+
+      const pauseTimer = window.setTimeout(() => {
+        const resumeTime = audioContext.currentTime;
+        engine.paused = false;
+        engine.master.gain.cancelScheduledValues(resumeTime);
+        engine.master.gain.setValueAtTime(0.0001, resumeTime);
+        engine.master.gain.exponentialRampToValueAtTime(0.34, resumeTime + 0.55);
+      }, 900 + Math.random() * 2300);
+      engine.timers.push(pauseTimer);
+    }
+
+    if (!engine.paused) {
+      const note = scale[Math.floor(Math.random() * scale.length)];
+      const octave = Math.random() > 0.78 ? 2 : 1;
+      const frequency = note * octave;
+      const duration = (0.34 + Math.random() * 0.9) / engine.tempo;
+      const volume = 0.045 + Math.random() * 0.045;
+      const now = audioContext.currentTime;
+
+      engine.filter.frequency.cancelScheduledValues(now);
+      engine.filter.frequency.setValueAtTime(engine.filter.frequency.value, now);
+      engine.filter.frequency.linearRampToValueAtTime(420 + Math.random() * 900, now + 0.35);
+      playMusicNote(audioContext, engine.filter, frequency, duration, volume);
+      playMusicPulse(audioContext, engine.filter, 55 / engine.tempo, 0.026);
+
+      if (Math.random() > 0.68) {
+        playMusicNote(audioContext, engine.filter, frequency * 1.5, duration * 0.65, volume * 0.68);
+      }
+
+      if (Math.random() > 0.56) {
+        const phrase = [frequency, frequency * 1.12, frequency * 1.5, frequency * 1.25];
+        phrase.forEach((phraseFrequency, index) => {
+          window.setTimeout(() => {
+            if (!engine.paused) {
+              playMusicNote(audioContext, engine.filter, phraseFrequency, 0.22 / engine.tempo, 0.032);
+            }
+          }, index * 145 / engine.tempo);
+        });
+      }
+    }
+
+    scheduleBackgroundMusic(audioContext, engine);
+  }, (320 + Math.random() * 520) / engine.tempo);
+
+  engine.timers.push(timer);
+}
+
+function stopBackgroundMusic(engine: BackgroundMusicEngine | null) {
+  if (!engine) return;
+
+  engine.timers.forEach((timer) => window.clearTimeout(timer));
+  engine.drones.forEach((oscillator) => {
+    try {
+      oscillator.stop();
+    } catch {
+      undefined;
+    }
+  });
+  engine.master.disconnect();
 }
 
 function playGameSound(audioContext: AudioContext, sound: GameSound) {
@@ -1061,6 +1542,140 @@ function playGameSound(audioContext: AudioContext, sound: GameSound) {
   playTone(audioContext, 620, now + 0.07, 0.1, 0.02, 'sine');
 }
 
+function getTodayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getWeekKey(date = new Date()) {
+  const weekStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const day = weekStart.getUTCDay() || 7;
+  weekStart.setUTCDate(weekStart.getUTCDate() - day + 1);
+  return weekStart.toISOString().slice(0, 10);
+}
+
+function getMonthKey(date = new Date()) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-01`;
+}
+
+function getDaysBetween(firstDate: string, secondDate: string) {
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Math.round((Date.parse(secondDate) - Date.parse(firstDate)) / dayMs);
+}
+
+function getLevelFromXp(xp: number) {
+  return Math.floor(Math.sqrt(Math.max(0, xp) / baseLevelXp)) + 1;
+}
+
+function getCurrentLevelXp(level: number) {
+  return (level - 1) * (level - 1) * baseLevelXp;
+}
+
+function getNextLevelXp(level: number) {
+  return level * level * baseLevelXp;
+}
+
+function getDailyChallenge(dateKey: string): DailyChallenge {
+  const dayNumber = Math.floor(Date.parse(dateKey) / (24 * 60 * 60 * 1000));
+  const challenges: DailyChallenge[] = [
+    {
+      title: 'Охота дня',
+      description: 'Победи 35 мобов сегодня.',
+      goal: 35,
+      rewardXp: 100,
+      getProgress: (profile) => profile.daily_kills,
+    },
+    {
+      title: 'Дежурство у портала',
+      description: 'Отбей 3 волны сегодня.',
+      goal: 3,
+      rewardXp: 100,
+      getProgress: (profile) => profile.daily_waves,
+    },
+    {
+      title: 'Короткая смена',
+      description: 'Победи 20 мобов сегодня.',
+      goal: 20,
+      rewardXp: 100,
+      getProgress: (profile) => profile.daily_kills,
+    },
+    {
+      title: 'Три удара времени',
+      description: 'Отбей 5 волн сегодня.',
+      goal: 5,
+      rewardXp: 100,
+      getProgress: (profile) => profile.daily_waves,
+    },
+  ];
+
+  return challenges[dayNumber % challenges.length];
+}
+
+function getWeeklyChallenge(weekKey: string): DailyChallenge {
+  const weekNumber = Math.floor(Date.parse(weekKey) / (7 * 24 * 60 * 60 * 1000));
+  const challenges: DailyChallenge[] = [
+    {
+      title: 'Недельный гарнизон',
+      description: 'Отбей 24 волны за неделю.',
+      goal: 24,
+      rewardXp: 420,
+      getProgress: (profile) => profile.weekly_waves,
+    },
+    {
+      title: 'Операция разлом',
+      description: 'Победи 320 мобов за неделю.',
+      goal: 320,
+      rewardXp: 420,
+      getProgress: (profile) => profile.weekly_kills,
+    },
+  ];
+
+  return challenges[weekNumber % challenges.length];
+}
+
+function getMonthlyChallenge(_monthKey: string): DailyChallenge {
+  return {
+    title: 'Супер-пупер марафон времени',
+    description: 'За месяц победи 1800 мобов и докажи, что портал под контролем.',
+    goal: 1800,
+    rewardXp: 1800,
+    getProgress: (profile) => profile.monthly_kills,
+  };
+}
+
+function refreshRetentionForToday(profile: RetentionProfile, todayKey = getTodayKey()) {
+  const weekKey = getWeekKey();
+  const monthKey = getMonthKey();
+  const lastCheckInDate = profile.last_check_in_date;
+  const streakDays =
+    lastCheckInDate === todayKey
+      ? profile.streak_days
+      : lastCheckInDate && getDaysBetween(lastCheckInDate, todayKey) === 1
+        ? profile.streak_days + 1
+        : 1;
+
+  const isSameChallengeDay = profile.daily_challenge_date === todayKey;
+  const isSameChallengeWeek = profile.weekly_challenge_date === weekKey;
+  const isSameChallengeMonth = profile.monthly_challenge_date === monthKey;
+
+  return {
+    ...profile,
+    streak_days: streakDays,
+    last_check_in_date: todayKey,
+    daily_challenge_date: todayKey,
+    daily_kills: isSameChallengeDay ? profile.daily_kills : 0,
+    daily_waves: isSameChallengeDay ? profile.daily_waves : 0,
+    daily_completed: isSameChallengeDay ? profile.daily_completed : false,
+    weekly_challenge_date: weekKey,
+    weekly_kills: isSameChallengeWeek ? profile.weekly_kills : 0,
+    weekly_waves: isSameChallengeWeek ? profile.weekly_waves : 0,
+    weekly_completed: isSameChallengeWeek ? profile.weekly_completed : false,
+    monthly_challenge_date: monthKey,
+    monthly_kills: isSameChallengeMonth ? profile.monthly_kills : 0,
+    monthly_waves: isSameChallengeMonth ? profile.monthly_waves : 0,
+    monthly_completed: isSameChallengeMonth ? profile.monthly_completed : false,
+  };
+}
+
 function readCompletedLevelIds() {
   const savedLevels = window.localStorage.getItem(levelMapStorageKey);
   if (!savedLevels) return [];
@@ -1077,12 +1692,57 @@ function readCompletedLevelIds() {
   }
 }
 
-export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
-  const [screen, setScreen] = useState<GameScreen>('profile');
+function readAchievementStats() {
+  const savedStats = window.localStorage.getItem(achievementStatsStorageKey);
+  if (!savedStats) return emptyAchievementStats;
+
+  try {
+    const parsedStats: unknown = JSON.parse(savedStats);
+    if (!parsedStats || typeof parsedStats !== 'object') return emptyAchievementStats;
+
+    const stats = parsedStats as Partial<Record<keyof AchievementStats, unknown>>;
+    return {
+      totalKills: typeof stats.totalKills === 'number' ? stats.totalKills : 0,
+      wavesCompleted: typeof stats.wavesCompleted === 'number' ? stats.wavesCompleted : 0,
+      towersBuilt: typeof stats.towersBuilt === 'number' ? stats.towersBuilt : 0,
+      upgradesBought: typeof stats.upgradesBought === 'number' ? stats.upgradesBought : 0,
+      bossesDefeated: typeof stats.bossesDefeated === 'number' ? stats.bossesDefeated : 0,
+      maxWaveReached: typeof stats.maxWaveReached === 'number' ? stats.maxWaveReached : 0,
+      hardVictories: typeof stats.hardVictories === 'number' ? stats.hardVictories : 0,
+      antiTimeVictories: typeof stats.antiTimeVictories === 'number' ? stats.antiTimeVictories : 0,
+      noDamageVictories: typeof stats.noDamageVictories === 'number' ? stats.noDamageVictories : 0,
+      noSkipVictories: typeof stats.noSkipVictories === 'number' ? stats.noSkipVictories : 0,
+    };
+  } catch {
+    return emptyAchievementStats;
+  }
+}
+
+function readTutorialSeen() {
+  return window.localStorage.getItem(tutorialSeenStorageKey) === 'true';
+}
+
+function getAchievementProgress(achievement: Achievement, stats: AchievementStats, completedLevels: number) {
+  return Math.min(achievement.goal, achievement.getProgress(stats, completedLevels));
+}
+
+export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; userId?: string }) {
+  const [screen, setScreen] = useState<GameScreen>(() => (readTutorialSeen() ? 'start' : 'tutorial'));
   const [playerName, setPlayerName] = useState('');
   const [playerAge, setPlayerAge] = useState('');
   const [profileError, setProfileError] = useState('');
+  const [tutorialSeen, setTutorialSeen] = useState(readTutorialSeen);
+  const [practiceTutorialActive, setPracticeTutorialActive] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState<TutorialStep>('selectTower');
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
   const [completedLevelIds, setCompletedLevelIds] = useState<number[]>(readCompletedLevelIds);
+  const [achievementStats, setAchievementStats] = useState<AchievementStats>(readAchievementStats);
+  const [retentionProfile, setRetentionProfile] = useState<RetentionProfile>(() =>
+    refreshRetentionForToday({ ...emptyRetentionProfile, user_id: userId ?? '', display_name: userEmail || 'Игрок' }),
+  );
+  const [leaderboard, setLeaderboard] = useState<RetentionLeaderboardEntry[]>([]);
+  const [retentionLoading, setRetentionLoading] = useState(Boolean(userId));
   const [selectedLevelId, setSelectedLevelId] = useState(1);
   const [difficulty, setDifficulty] = useState<Difficulty['id']>('easy');
   const selectedDifficultyData = difficultyModes.find((mode) => mode.id === difficulty) ?? difficultyModes[0];
@@ -1109,7 +1769,9 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   const [boardZoom, setBoardZoom] = useState(1);
   const boardRef = useRef<HTMLDivElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const backgroundMusicRef = useRef<BackgroundMusicEngine | null>(null);
   const commentatorRequestRef = useRef(0);
+  const runChallengeRef = useRef({ tookDamage: false, skippedWave: false });
   const cameraDragRef = useRef({
     active: false,
     hasMoved: false,
@@ -1127,13 +1789,30 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   const isLoadoutReady = equippedTowerIds.length >= Math.min(requiredLoadoutSize, availableTowerKinds.length);
   const selectedPlacedTower = towers.find((tower) => tower.id === selectedTowerId) ?? null;
   const selectedLevel = levelMap.find((level) => level.id === selectedLevelId) ?? levelMap[0];
+  const selectedBattleMap = battleMaps.find((battleMap) => battleMap.id === selectedLevelId) ?? battleMaps[0];
   const enemiesInCurrentWave = 5 + Math.ceil(wave * 1.45) + selectedDifficultyData.extraEnemies + (isBossWave(wave) ? 1 : 0);
   const waveElapsedSeconds = Math.max(0, getWaveDuration(wave) - waveTimeLeft);
   const skipSecondsLeft = Math.max(0, skipUnlockDelay - waveElapsedSeconds);
   const canSkipWave = isWaveRunning && skipSecondsLeft === 0 && baseHp > 0 && !isVictory;
-  const playerLabel = playerName.trim() ? `${playerName.trim()}, ${playerAge} лет` : userEmail;
+  const playerLabel = playerName.trim() || retentionProfile.display_name || userEmail || 'Гость';
+  const completedAchievements = achievements.filter(
+    (achievement) => getAchievementProgress(achievement, achievementStats, completedLevelIds.length) >= achievement.goal,
+  ).length;
+  const retentionLevel = getLevelFromXp(retentionProfile.xp);
+  const currentLevelXp = getCurrentLevelXp(retentionLevel);
+  const nextLevelXp = getNextLevelXp(retentionLevel);
+  const levelProgressPercent = Math.round(((retentionProfile.xp - currentLevelXp) / (nextLevelXp - currentLevelXp)) * 100);
+  const dailyChallenge = getDailyChallenge(getTodayKey());
+  const weeklyChallenge = getWeeklyChallenge(getWeekKey());
+  const monthlyChallenge = getMonthlyChallenge(getMonthKey());
+  const dailyProgress = Math.min(dailyChallenge.goal, dailyChallenge.getProgress(retentionProfile));
+  const weeklyProgress = Math.min(weeklyChallenge.goal, weeklyChallenge.getProgress(retentionProfile));
+  const monthlyProgress = Math.min(monthlyChallenge.goal, monthlyChallenge.getProgress(retentionProfile));
+  const dailyProgressPercent = Math.round((dailyProgress / dailyChallenge.goal) * 100);
+  const weeklyProgressPercent = Math.round((weeklyProgress / weeklyChallenge.goal) * 100);
+  const monthlyProgressPercent = Math.round((monthlyProgress / monthlyChallenge.goal) * 100);
 
-  function playSound(sound: GameSound) {
+  function getAudioContext() {
     if (!audioContextRef.current) {
       audioContextRef.current = new AudioContext();
     }
@@ -1143,17 +1822,192 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
       audioContext.resume().catch(() => undefined);
     }
 
+    return audioContext;
+  }
+
+  function startBackgroundMusic() {
+    const audioContext = getAudioContext();
+    if (backgroundMusicRef.current) return;
+
+    const engine = createBackgroundMusic(audioContext);
+    backgroundMusicRef.current = engine;
+    playMusicNote(audioContext, engine.filter, 110, 1.2, 0.085);
+    playMusicNote(audioContext, engine.filter, 164.81, 0.9, 0.065);
+    playMusicNote(audioContext, engine.filter, 61.74, 1.6, 0.075);
+    playMusicPulse(audioContext, engine.filter, 55, 0.04);
+    scheduleBackgroundMusic(audioContext, engine);
+  }
+
+  function activateAudio() {
+    startBackgroundMusic();
+  }
+
+  function playSound(sound: GameSound) {
+    const audioContext = getAudioContext();
+    startBackgroundMusic();
     playGameSound(audioContext, sound);
+  }
+
+  function applyTimedChallengeRewards(profile: RetentionProfile) {
+    let nextProfile = profile;
+    const daily = getDailyChallenge(nextProfile.daily_challenge_date ?? getTodayKey());
+    const weekly = getWeeklyChallenge(nextProfile.weekly_challenge_date ?? getWeekKey());
+    const monthly = getMonthlyChallenge(nextProfile.monthly_challenge_date ?? getMonthKey());
+
+    if (!nextProfile.daily_completed && daily.getProgress(nextProfile) >= daily.goal) {
+      nextProfile = { ...nextProfile, xp: nextProfile.xp + daily.rewardXp, daily_completed: true };
+    }
+
+    if (!nextProfile.weekly_completed && weekly.getProgress(nextProfile) >= weekly.goal) {
+      nextProfile = { ...nextProfile, xp: nextProfile.xp + weekly.rewardXp, weekly_completed: true };
+    }
+
+    if (!nextProfile.monthly_completed && monthly.getProgress(nextProfile) >= monthly.goal) {
+      nextProfile = { ...nextProfile, xp: nextProfile.xp + monthly.rewardXp, monthly_completed: true };
+    }
+
+    return nextProfile;
+  }
+
+  function updateRetentionProfile(update: (profile: RetentionProfile) => RetentionProfile) {
+    setRetentionProfile((current) => applyTimedChallengeRewards(update(refreshRetentionForToday(current))));
+  }
+
+  function buildRetentionPayload(profile: RetentionProfile) {
+    return {
+      user_id: profile.user_id,
+      display_name: profile.display_name,
+      xp: profile.xp,
+      streak_days: profile.streak_days,
+      last_check_in_date: profile.last_check_in_date,
+      best_wave: profile.best_wave,
+      total_kills: profile.total_kills,
+      daily_challenge_date: profile.daily_challenge_date,
+      daily_kills: profile.daily_kills,
+      daily_waves: profile.daily_waves,
+      daily_completed: profile.daily_completed,
+      weekly_challenge_date: profile.weekly_challenge_date,
+      weekly_kills: profile.weekly_kills,
+      weekly_waves: profile.weekly_waves,
+      weekly_completed: profile.weekly_completed,
+      monthly_challenge_date: profile.monthly_challenge_date,
+      monthly_kills: profile.monthly_kills,
+      monthly_waves: profile.monthly_waves,
+      monthly_completed: profile.monthly_completed,
+    };
+  }
+
+  function normalizeRetentionProfile(row: Partial<RetentionProfile> | null, fallbackName: string) {
+    return refreshRetentionForToday({
+      ...emptyRetentionProfile,
+      user_id: userId ?? '',
+      display_name: row?.display_name ?? fallbackName,
+      xp: row?.xp ?? 0,
+      streak_days: row?.streak_days ?? 0,
+      last_check_in_date: row?.last_check_in_date ?? null,
+      best_wave: row?.best_wave ?? 0,
+      total_kills: row?.total_kills ?? 0,
+      daily_challenge_date: row?.daily_challenge_date ?? null,
+      daily_kills: row?.daily_kills ?? 0,
+      daily_waves: row?.daily_waves ?? 0,
+      daily_completed: row?.daily_completed ?? false,
+      weekly_challenge_date: row?.weekly_challenge_date ?? null,
+      weekly_kills: row?.weekly_kills ?? 0,
+      weekly_waves: row?.weekly_waves ?? 0,
+      weekly_completed: row?.weekly_completed ?? false,
+      monthly_challenge_date: row?.monthly_challenge_date ?? null,
+      monthly_kills: row?.monthly_kills ?? 0,
+      monthly_waves: row?.monthly_waves ?? 0,
+      monthly_completed: row?.monthly_completed ?? false,
+    });
+  }
+
+  async function refreshLeaderboard() {
+    if (!supabase) return;
+
+    const { data } = await supabase.rpc('get_retention_leaderboard');
+    if (!Array.isArray(data)) return;
+
+    setLeaderboard(
+      data
+        .filter((row): row is RetentionLeaderboardEntry => {
+          if (!row || typeof row !== 'object') return false;
+          const entry = row as Partial<RetentionLeaderboardEntry>;
+          return (
+            typeof entry.display_name === 'string' &&
+            typeof entry.xp === 'number' &&
+            typeof entry.streak_days === 'number' &&
+            typeof entry.best_wave === 'number' &&
+            typeof entry.total_kills === 'number'
+          );
+        })
+        .slice(0, 5),
+    );
   }
 
   const enemiesByCell = useMemo(() => {
     const map = new Map<number, Enemy[]>();
     enemies.forEach((enemy) => {
-      const cell = getEnemyCell(enemy);
+      const cell = getEnemyCell(enemy, selectedBattleMap.pathCells);
       map.set(cell, [...(map.get(cell) ?? []), enemy]);
     });
     return map;
-  }, [enemies]);
+  }, [enemies, selectedBattleMap.pathCells]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRetentionProfile() {
+      if (!userId || !supabase) {
+        setRetentionLoading(false);
+        setRetentionProfile(refreshRetentionForToday({ ...emptyRetentionProfile, display_name: userEmail || 'Гость' }));
+        return;
+      }
+
+      setRetentionLoading(true);
+      const fallbackName = playerName.trim() || userEmail || 'Игрок';
+      const { data } = await supabase
+        .from('retention_profiles')
+        .select('user_id, display_name, xp, streak_days, last_check_in_date, best_wave, total_kills, daily_challenge_date, daily_kills, daily_waves, daily_completed, weekly_challenge_date, weekly_kills, weekly_waves, weekly_completed, monthly_challenge_date, monthly_kills, monthly_waves, monthly_completed')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      const profile = normalizeRetentionProfile(data, fallbackName);
+      setRetentionProfile(profile);
+      setRetentionLoading(false);
+      await supabase.from('retention_profiles').upsert(buildRetentionPayload(profile));
+      await refreshLeaderboard();
+    }
+
+    void loadRetentionProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, userEmail]);
+
+  useEffect(() => {
+    return () => {
+      stopBackgroundMusic(backgroundMusicRef.current);
+      backgroundMusicRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!userId || !supabase || retentionLoading) return;
+
+    const client = supabase;
+    const timer = window.setTimeout(() => {
+      void client
+        .from('retention_profiles')
+        .upsert(buildRetentionPayload({ ...retentionProfile, user_id: userId }))
+        .then(() => refreshLeaderboard());
+    }, 600);
+
+    return () => window.clearTimeout(timer);
+  }, [retentionLoading, retentionProfile, userId]);
 
   useEffect(() => {
     if (screen !== 'battle') return;
@@ -1239,6 +2093,9 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
       const now = Date.now();
       let coinsEarned = 0;
       let escapedDamage = 0;
+      let defeatedCount = 0;
+      let defeatedBosses = 0;
+      let completedWaveCount = 0;
       let nextTowers = towers;
 
       setEnemies((currentEnemies) => {
@@ -1256,7 +2113,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           if (enemy.kind === 'microRift' && now - enemy.lastAbilityAt >= 6500) {
             nextEnemy = {
               ...nextEnemy,
-              step: Math.min(pathCells.length - 1, nextEnemy.step + 1),
+              step: Math.min(selectedBattleMap.pathCells.length - 1, nextEnemy.step + 1),
               lastAbilityAt: now,
             };
           }
@@ -1280,7 +2137,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           return {
             ...nextEnemy,
             moveCharge: moveCharge % movementThreshold,
-            step: Math.min(pathCells.length - 1, nextEnemy.step + stepsToMove),
+            step: Math.min(selectedBattleMap.pathCells.length - 1, nextEnemy.step + stepsToMove),
           };
         });
         if (nextEnemies.some((enemy) => enemy.isBoss && enemy.speedBoostUntil > now)) {
@@ -1289,16 +2146,16 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
         nextTowers = towers.map((tower) => {
           const stats = getTowerStats(tower);
-          const cooldown = stats.cooldown * getTowerSlowMultiplier(tower, nextEnemies, now) * getForgeCooldownMultiplier(tower, towers);
+          const cooldown = stats.cooldown * getTowerSlowMultiplier(tower, nextEnemies, now, selectedBattleMap.pathCells) * getForgeCooldownMultiplier(tower, towers);
           if (now - tower.lastShotAt < cooldown) {
             return tower;
           }
 
-          const target = chooseTowerTarget(tower, nextEnemies, stats.range);
+          const target = chooseTowerTarget(tower, nextEnemies, stats.range, selectedBattleMap.pathCells);
 
           if (!target) return tower;
 
-          const splashTargets = getTowerSplashTargets(tower, target, nextEnemies);
+          const splashTargets = getTowerSplashTargets(tower, target, nextEnemies, selectedBattleMap.pathCells);
           const splashTargetIds = new Set(splashTargets.map((enemy) => enemy.id));
           playSound(stats.id === 'arrow' ? 'arrowHit' : stats.id === 'slow' || stats.id === 'hourglass' || stats.id === 'gravity' ? 'slowHit' : 'blastHit');
           nextEnemies = nextEnemies.map((enemy) => {
@@ -1331,7 +2188,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
             ...tower,
             lastShotAt: now,
             attackCount: tower.attackCount + 1,
-            lastTargetCell: getEnemyCell(target),
+            lastTargetCell: getEnemyCell(target, selectedBattleMap.pathCells),
           };
         });
 
@@ -1361,15 +2218,21 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
         const aliveEnemies = nextEnemies.filter((enemy) => {
           if (enemy.hp <= 0) {
-            coinsEarned += enemy.reward + getArchiveRewardBonus(enemy, towers);
+            coinsEarned += enemy.reward + getArchiveRewardBonus(enemy, towers, selectedBattleMap.pathCells);
+            defeatedCount += 1;
+            if (enemy.isBoss) defeatedBosses += 1;
             return false;
           }
-          if (enemy.step >= pathCells.length - 1) {
+          if (enemy.step >= selectedBattleMap.pathCells.length - 1) {
             escapedDamage += enemy.isBoss ? baseHp : Math.max(1, Math.ceil(enemy.hp / 35));
             return false;
           }
           return true;
         }).concat(spawnedByDeaths);
+
+        if (escapedDamage > 0) {
+          runChallengeRef.current.tookDamage = true;
+        }
 
         if (escapedDamage >= baseHp) {
           setIsWaveRunning(false);
@@ -1380,6 +2243,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
         }
 
         if (aliveEnemies.length === 0 && spawnedCount >= enemiesInCurrentWave) {
+          completedWaveCount += 1;
           setIsWaveRunning(false);
           setWaveTimeLeft(0);
           if (wave >= maxWaves) {
@@ -1410,14 +2274,45 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
       });
 
       setTowers(nextTowers);
+      if (defeatedCount > 0 || defeatedBosses > 0 || completedWaveCount > 0) {
+        setAchievementStats((current) => ({
+          ...current,
+          totalKills: current.totalKills + defeatedCount,
+          bossesDefeated: current.bossesDefeated + defeatedBosses,
+          wavesCompleted: current.wavesCompleted + completedWaveCount,
+        }));
+        updateRetentionProfile((current) => ({
+          ...current,
+          xp: current.xp + defeatedCount * 2 + completedWaveCount * 30 + defeatedBosses * 220,
+          total_kills: current.total_kills + defeatedCount,
+          daily_kills: current.daily_kills + defeatedCount,
+          daily_waves: current.daily_waves + completedWaveCount,
+          weekly_kills: current.weekly_kills + defeatedCount,
+          weekly_waves: current.weekly_waves + completedWaveCount,
+          monthly_kills: current.monthly_kills + defeatedCount,
+          monthly_waves: current.monthly_waves + completedWaveCount,
+        }));
+        if (practiceTutorialActive && tutorialStep === 'watchWave' && completedWaveCount > 0) {
+          setPracticeTutorialActive(false);
+          setTutorialStep('complete');
+          window.localStorage.setItem(tutorialSeenStorageKey, 'true');
+          setTutorialSeen(true);
+          setMessage('Обучение завершено. Теперь можно пройти уровень самостоятельно.');
+          setCommentatorMessage('Комментатор: база выстояла. Дальше пробуй разные башни, усиливай важные позиции и следи за HP базы.');
+        }
+      }
     }, 650);
 
     return () => window.clearInterval(battleTimer);
-  }, [baseHp, enemiesInCurrentWave, isWaveRunning, spawnedCount, towers, wave]);
+  }, [baseHp, enemiesInCurrentWave, isWaveRunning, practiceTutorialActive, selectedBattleMap.pathCells, spawnedCount, towers, tutorialStep, wave]);
 
   useEffect(() => {
     window.localStorage.setItem(levelMapStorageKey, JSON.stringify(completedLevelIds));
   }, [completedLevelIds]);
+
+  useEffect(() => {
+    window.localStorage.setItem(achievementStatsStorageKey, JSON.stringify(achievementStats));
+  }, [achievementStats]);
 
   useEffect(() => {
     if (!isVictory) return;
@@ -1425,7 +2320,14 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     setCompletedLevelIds((current) =>
       current.includes(selectedLevelId) ? current : [...current, selectedLevelId],
     );
-  }, [isVictory, selectedLevelId]);
+    setAchievementStats((current) => ({
+      ...current,
+      hardVictories: current.hardVictories + (difficulty === 'hard' ? 1 : 0),
+      antiTimeVictories: current.antiTimeVictories + (difficulty === 'antiTime' ? 1 : 0),
+      noDamageVictories: current.noDamageVictories + (runChallengeRef.current.tookDamage ? 0 : 1),
+      noSkipVictories: current.noSkipVictories + (runChallengeRef.current.skippedWave ? 0 : 1),
+    }));
+  }, [difficulty, isVictory, selectedLevelId]);
 
   useEffect(() => {
     if (baseHp === 0) {
@@ -1453,8 +2355,64 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
     setPlayerName(cleanName);
     setPlayerAge(String(age));
+    activateAudio();
+    updateRetentionProfile((current) => ({ ...current, display_name: cleanName }));
     setProfileError('');
-    setScreen('start');
+    setScreen(tutorialSeen ? 'start' : 'tutorial');
+  }
+
+  function openNameEditor() {
+    setNameDraft(playerLabel);
+    setProfileError('');
+    setIsEditingName(true);
+  }
+
+  function submitNameChange(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const cleanName = nameDraft.trim();
+    if (cleanName.length < 3 || cleanName.length > 21) {
+      setProfileError('Введи имя от 3 до 21 символа.');
+      return;
+    }
+
+    setPlayerName(cleanName);
+    updateRetentionProfile((current) => ({ ...current, display_name: cleanName }));
+    setProfileError('');
+    setIsEditingName(false);
+    setMessage(`Имя игрока изменено на ${cleanName}.`);
+  }
+
+  function closeTutorial(nextScreen: GameScreen = 'start') {
+    activateAudio();
+    if (practiceTutorialActive) {
+      setIsWaveRunning(false);
+      setEnemies([]);
+      setSpawnedCount(0);
+    }
+    setPracticeTutorialActive(false);
+    window.localStorage.setItem(tutorialSeenStorageKey, 'true');
+    setTutorialSeen(true);
+    setScreen(nextScreen);
+  }
+
+  function startPracticeTutorial() {
+    const firstLevel = levelMap[0];
+    const easyMode = difficultyModes[0];
+
+    activateAudio();
+    setSelectedLevelId(firstLevel.id);
+    setDifficulty(easyMode.id);
+    resetGame(easyMode, firstLevel.startWave);
+    setTowerSlots(['arrow', 'slow', 'blast', null, null, null]);
+    setSelectedTower('arrow');
+    setPracticeTutorialActive(true);
+    setTutorialStep('selectTower');
+    setScreen('battle');
+    setGameStartedAt(Date.now());
+    setDefeatDurationSeconds(0);
+    setMessage('Обучение началось: выбери первую башню в панели слева.');
+    setCommentatorMessage('Комментатор: начнем с практики. Слева выбери башню, потом поставь ее на подсвеченную платформу.');
   }
 
   function addTowerToSlot(kind: TowerKind['id']) {
@@ -1493,6 +2451,11 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     if (!kind) return;
     setSelectedTower(kind);
     setSelectedTowerId(null);
+    if (practiceTutorialActive && tutorialStep === 'selectTower') {
+      setTutorialStep('placeTower');
+      setMessage('Отлично. Теперь нажми на подсвеченную платформу рядом с дорогой.');
+      setCommentatorMessage('Комментатор: башни нельзя ставить на дорогу. Платформа рядом с поворотом даст больше времени для атаки.');
+    }
   }
 
   function handleCellClick(cell: number) {
@@ -1508,8 +2471,8 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
       return;
     }
 
-    if (!isBuildableCell(cell)) return;
-    const isHighlandCell = highlandCells.includes(cell);
+    if (!isBuildableCell(cell, selectedBattleMap.buildCells)) return;
+    const isHighlandCell = selectedBattleMap.highlandCells.includes(cell);
     if (!isSelectedTowerEquipped) {
       setMessage('Сначала добавь башню в один из 6 слотов.');
       return;
@@ -1542,6 +2505,15 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     ]);
     setSelectedTowerId(towerId);
     setCoins((current) => current - selectedTowerData.cost);
+    setAchievementStats((current) => ({ ...current, towersBuilt: current.towersBuilt + 1 }));
+    updateRetentionProfile((current) => ({ ...current, xp: current.xp + 4 }));
+    if (practiceTutorialActive && (tutorialStep === 'placeTower' || tutorialStep === 'selectTower')) {
+      setTutorialStep('startWave');
+      setMessage('Башня поставлена. Теперь запусти волну кнопкой сверху.');
+      setCommentatorMessage('Комментатор: монеты тратятся на башни и улучшения. После победы над врагами монеты вернутся наградой.');
+      return;
+    }
+
     setMessage(`${selectedTowerData.name} готов к защите линии времени.`);
   }
 
@@ -1563,6 +2535,8 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
       ),
     );
     setCoins((current) => current - cost);
+    setAchievementStats((current) => ({ ...current, upgradesBought: current.upgradesBought + 1 }));
+    updateRetentionProfile((current) => ({ ...current, xp: current.xp + 8 }));
     setMessage(`${getTowerKind(tower.kind).name} улучшен до уровня ${tower.level + 1}.`);
   }
 
@@ -1592,6 +2566,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     setIsWaveRunning(false);
     setWaveTimeLeft(getWaveDuration(startWaveNumber));
     setCommentatorMessage('');
+    runChallengeRef.current = { tookDamage: false, skippedWave: false };
     setGameStartedAt(null);
     setDefeatDurationSeconds(0);
   }
@@ -1602,7 +2577,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     resetGame(mode, selectedLevel.startWave);
     setTowerSlots([null, null, null, null, null, null]);
     setScreen('loadout');
-    setMessage(`${selectedLevel.title}. ${mode.name}: собери набор башен перед входом в бой.`);
+    setMessage(`${selectedLevel.title}. Карта: ${selectedBattleMap.name}. ${mode.name}: собери набор башен перед входом в бой.`);
   }
 
   function beginBattleAfterLoadout() {
@@ -1615,15 +2590,18 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     setGameStartedAt(Date.now());
     setDefeatDurationSeconds(0);
     setCommentatorMessage('');
-    setMessage(`${selectedLevel.title}. ${selectedDifficultyData.name}: расставь башни и запускай волну.`);
+    setMessage(`${selectedLevel.title}. Карта: ${selectedBattleMap.name}. ${selectedDifficultyData.name}: расставь башни и запускай волну.`);
   }
 
   function selectLevel(level: LevelMapItem) {
     if (isWaveRunning) return;
+    const battleMap = battleMaps.find((mapLayout) => mapLayout.id === level.id) ?? battleMaps[0];
+
+    activateAudio();
     setSelectedLevelId(level.id);
     setScreen('difficulty');
     setCommentatorMessage('');
-    setMessage(`${level.title}: ${level.description}`);
+    setMessage(`${level.title}: ${battleMap.name}. ${battleMap.description}`);
   }
 
   async function requestWaveCommentary(waveNumber: number, eraName: string, difficultyData: Difficulty) {
@@ -1669,6 +2647,13 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
   function startWave() {
     if (isWaveRunning || baseHp === 0 || isVictory || wave > maxWaves) return;
+    activateAudio();
+    if (practiceTutorialActive && tutorialStep !== 'startWave') {
+      setMessage('Сначала поставь башню на подсвеченную платформу.');
+      setCommentatorMessage('Комментатор: без башни волна пройдет к базе. Нажми на желтую платформу рядом с дорогой.');
+      return;
+    }
+
     if (!isLoadoutReady) {
       setScreen('loadout');
       setMessage(`Сначала собери набор: минимум ${Math.min(requiredLoadoutSize, availableTowerKinds.length)} башни.`);
@@ -1680,6 +2665,19 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     setWaveTimeLeft(getWaveDuration(wave));
     playSound('waveStart');
     setIsWaveRunning(true);
+    setAchievementStats((current) => ({ ...current, maxWaveReached: Math.max(current.maxWaveReached, wave) }));
+    updateRetentionProfile((current) => ({
+      ...current,
+      xp: current.xp + 3,
+      best_wave: Math.max(current.best_wave, wave),
+    }));
+    if (practiceTutorialActive && tutorialStep === 'startWave') {
+      setTutorialStep('watchWave');
+      setMessage('Волна началась. Смотри, как враги идут по дороге, а башня атакует их в радиусе.');
+      setCommentatorMessage('Комментатор: если враги проходят слишком далеко, ставь башни ближе к поворотам и усиливай уже построенные.');
+      return;
+    }
+
     void requestWaveCommentary(wave, era.name, selectedDifficultyData);
     setMessage(
       isBossWave(wave)
@@ -1691,6 +2689,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
   function skipWave() {
     if (!canSkipWave) return;
 
+    runChallengeRef.current.skippedWave = true;
     const nextWave = wave + 1;
     if (nextWave > maxWaves) {
       setEnemies([]);
@@ -1773,6 +2772,101 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   }
 
+  function renderRetentionPanel(variant: 'profile' | 'main') {
+    const isProfileVariant = variant === 'profile';
+    const leaderboardRows = leaderboard.length > 0 ? leaderboard : [retentionProfile];
+    const timedChallenges = [
+      {
+        label: 'Ежедневное',
+        challenge: dailyChallenge,
+        progress: dailyProgress,
+        progressPercent: dailyProgressPercent,
+        isCompleted: retentionProfile.daily_completed,
+      },
+      {
+        label: 'Еженедельное',
+        challenge: weeklyChallenge,
+        progress: weeklyProgress,
+        progressPercent: weeklyProgressPercent,
+        isCompleted: retentionProfile.weekly_completed,
+      },
+      {
+        label: 'Месяц',
+        challenge: monthlyChallenge,
+        progress: monthlyProgress,
+        progressPercent: monthlyProgressPercent,
+        isCompleted: retentionProfile.monthly_completed,
+      },
+    ];
+
+    return (
+      <section className={isProfileVariant ? 'retention-panel profile-retention' : 'retention-panel'}>
+        <div className="retention-head">
+          <div>
+            <strong>Прогресс защитника</strong>
+            <span>{userId ? 'сохраняется в Supabase' : 'войдите, чтобы сохранять онлайн'}</span>
+          </div>
+          <em>{retentionLoading ? '...' : `${retentionProfile.streak_days} дн. серия`}</em>
+        </div>
+
+        <div className="retention-grid">
+          <div className="retention-stat">
+            <span>Уровень</span>
+            <strong>{retentionLevel}</strong>
+            <small>{retentionProfile.xp} XP</small>
+          </div>
+          <div className="retention-stat">
+            <span>Лучшая волна</span>
+            <strong>{retentionProfile.best_wave}</strong>
+            <small>{retentionProfile.total_kills} побед</small>
+          </div>
+          <div className="retention-stat">
+            <span>Серия</span>
+            <strong>{retentionProfile.streak_days}</strong>
+            <small>дней подряд</small>
+          </div>
+        </div>
+
+        <div className="xp-track" aria-label={`XP до следующего уровня ${levelProgressPercent}%`}>
+          <span style={{ width: `${Math.max(3, Math.min(100, levelProgressPercent))}%` }} />
+        </div>
+        <p className="xp-caption">
+          До уровня {retentionLevel + 1}: {Math.max(0, nextLevelXp - retentionProfile.xp)} XP
+        </p>
+
+        <div className="challenge-list">
+          {timedChallenges.map((item) => (
+            <div className="challenge-item" key={item.label}>
+              <div className="daily-challenge">
+                <div>
+                  <strong>{item.label}: {item.challenge.title}</strong>
+                  <span>{item.challenge.description} Награда: {item.challenge.rewardXp} XP.</span>
+                </div>
+                <small>{item.isCompleted ? 'готово' : `${item.progress}/${item.challenge.goal}`}</small>
+              </div>
+              <div className="daily-track" aria-label={`${item.label} задание ${item.progressPercent}%`}>
+                <span style={{ width: `${Math.max(3, Math.min(100, item.progressPercent))}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {!isProfileVariant && (
+          <div className="leaderboard-mini">
+            <strong>Лидеры</strong>
+            {leaderboardRows.slice(0, 5).map((entry, index) => (
+              <span key={`${entry.display_name}-${index}`}>
+                <b>{index + 1}</b>
+                {entry.display_name}
+                <em>{entry.xp} XP</em>
+              </span>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  }
+
   return (
     <section className={`game-shell ${screen === 'battle' && baseHp === 0 ? 'defeat-state' : ''}`} style={{ '--era': era.accent } as CSSProperties}>
       <div className="time-atmosphere" aria-hidden="true">
@@ -1793,7 +2887,6 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
       <div className="game-top">
         <div>
           <p className="hello">Игрок: {playerLabel}</p>
-          <h2>Chrono Defense</h2>
           <p className="era-line">
             {screen === 'battle' ? `${era.name} · ${era.year}` : selectedLevel.title}
           </p>
@@ -1820,6 +2913,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
             <h3>Перед началом</h3>
             <p>Введи имя и возраст игрока, чтобы начать защиту линии времени.</p>
           </div>
+          {renderRetentionPanel('profile')}
           <form className="player-form" onSubmit={submitPlayerProfile}>
             <label>
               Имя
@@ -1850,6 +2944,47 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
         </section>
       )}
 
+      {screen === 'tutorial' && (
+        <section className="tutorial-screen">
+          <span className="broken-clock screen-clock tutorial-clock" aria-hidden="true" />
+          <span className="time-crack screen-crack tutorial-crack" aria-hidden="true" />
+          <div className="screen-heading">
+            <h3>Практическое обучение</h3>
+            <p>Сейчас мы сразу перейдем на карту битвы: комментатор покажет, какую башню выбрать, куда ее поставить и когда запускать волну.</p>
+          </div>
+          <div className="tutorial-grid">
+            <article className="tutorial-card">
+              <span>1</span>
+              <strong>Выбери уровень</strong>
+              <p>На карте непройденные территории бледные. После победы они получают цвет эпохи.</p>
+            </article>
+            <article className="tutorial-card">
+              <span>2</span>
+              <strong>Собери башни</strong>
+              <p>Перед боем выбери минимум {Math.min(requiredLoadoutSize, availableTowerKinds.length)} башни.</p>
+            </article>
+            <article className="tutorial-card">
+              <span>3</span>
+              <strong>Ставь не на дороге</strong>
+              <p>Башни ставятся только на специальные клетки. Дорога нужна врагам для движения.</p>
+            </article>
+            <article className="tutorial-card">
+              <span>4</span>
+              <strong>Улучшай защиту</strong>
+              <p>Выбирай башню на поле, улучшай её и меняй приоритет цели.</p>
+            </article>
+          </div>
+          <div className="tutorial-actions">
+            <button type="button" onClick={startPracticeTutorial}>
+              Начать практику
+            </button>
+            <button className="secondary" type="button" onClick={() => closeTutorial('start')}>
+              Пропустить
+            </button>
+          </div>
+        </section>
+      )}
+
       {screen === 'start' && (
         <section className="menu-screen">
           <span className="broken-clock screen-clock menu-clock" aria-hidden="true" />
@@ -1857,13 +2992,106 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           <div>
             <h3>Начальный экран</h3>
             <p>Выбери старт, чтобы перейти к карте уровней. Настройки камеры уже доступны в бою: мышь крутит карту, колесико меняет масштаб.</p>
+            <div className="name-editor">
+              {!isEditingName ? (
+                <button className="secondary" type="button" onClick={openNameEditor}>
+                  Изменить имя
+                </button>
+              ) : (
+                <form onSubmit={submitNameChange}>
+                  <input
+                    type="text"
+                    value={nameDraft}
+                    onChange={(event) => setNameDraft(event.target.value)}
+                    placeholder="Имя игрока"
+                    autoComplete="given-name"
+                    minLength={3}
+                    maxLength={21}
+                  />
+                  <button type="submit">Сохранить</button>
+                  <button className="ghost" type="button" onClick={() => {
+                    setIsEditingName(false);
+                    setProfileError('');
+                  }}>
+                    Отмена
+                  </button>
+                </form>
+              )}
+              {profileError && <p className="form-error">{profileError}</p>}
+            </div>
+            {renderRetentionPanel('main')}
           </div>
           <div className="menu-actions">
-            <button type="button" onClick={() => setScreen('levels')}>
+            <button type="button" onClick={() => {
+              activateAudio();
+              setScreen('levels');
+            }}>
               Начать
             </button>
-            <button className="secondary" type="button" onClick={() => setScreen('difficulty')}>
+            <button className="secondary" type="button" onClick={() => setScreen('achievements')}>
+              Достижения {completedAchievements}/{achievements.length}
+            </button>
+            <button className="secondary" type="button" onClick={() => {
+              activateAudio();
+              setScreen('difficulty');
+            }}>
               Настройки
+            </button>
+            <button className="secondary" type="button" onClick={() => setScreen('tutorial')}>
+              Туториал
+            </button>
+          </div>
+        </section>
+      )}
+
+      {screen === 'achievements' && (
+        <section className="achievement-screen">
+          <span className="broken-clock screen-clock achievement-clock" aria-hidden="true" />
+          <span className="time-shard achievement-shard" aria-hidden="true" />
+          <div className="screen-heading">
+            <h3>Достижения</h3>
+            <p>Выполняй цели во время защиты портала. Прогресс сохраняется на этом компьютере.</p>
+          </div>
+          <div className="achievement-summary">
+            <strong>{completedAchievements}/{achievements.length}</strong>
+            <span>получено</span>
+          </div>
+          <div className="achievement-list">
+            {achievements.map((achievement) => {
+              const progress = getAchievementProgress(achievement, achievementStats, completedLevelIds.length);
+              const isUnlocked = progress >= achievement.goal;
+              const progressPercent = Math.round((progress / achievement.goal) * 100);
+              const isHardtry = achievement.id.startsWith('hardtry-');
+
+              return (
+                <article
+                  className={[
+                    'achievement-card',
+                    isUnlocked ? 'unlocked' : '',
+                    isHardtry ? 'hardtry' : '',
+                  ].join(' ')}
+                  key={achievement.id}
+                >
+                  <div className="achievement-icon" aria-hidden="true">
+                    {isUnlocked ? '✓' : '•'}
+                  </div>
+                  <div>
+                    <strong>{achievement.title}</strong>
+                    <p>{achievement.description}</p>
+                    <div className="achievement-progress" aria-label={`Прогресс ${progress} из ${achievement.goal}`}>
+                      <span style={{ width: `${progressPercent}%` }} />
+                    </div>
+                    <small>
+                      {progress}/{achievement.goal} · {isUnlocked ? 'получено' : 'в процессе'}
+                    </small>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+          <div className="menu-actions">
+            <button className="ghost" type="button" onClick={() => setScreen('start')}>
+              Назад
             </button>
           </div>
         </section>
@@ -1879,7 +3107,13 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           </div>
           <div className="level-map-layout">
             <div className="level-map-card">
-              <div className="level-map" aria-label="Карта уровней 30 на 30">
+              <div
+                className={[
+                  'level-map',
+                  ...completedLevelIds.map((levelId) => `completed-level-${levelId}`),
+                ].join(' ')}
+                aria-label="Карта уровней 30 на 30"
+              >
                 <span className="map-orbit orbit-a" aria-hidden="true" />
                 <span className="map-orbit orbit-b" aria-hidden="true" />
                 <span className="map-route route-stone" aria-hidden="true" />
@@ -1892,6 +3126,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                 {levelMap.map((level) => {
                   const position = levelMapPositions[level.id];
                   const isCompleted = completedLevelIds.includes(level.id);
+                  const battleMap = battleMaps.find((mapLayout) => mapLayout.id === level.id) ?? battleMaps[0];
 
                   return (
                     <button
@@ -1912,7 +3147,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                       <span className="level-number">{level.id}</span>
                       <small>{isCompleted ? 'Открыто' : 'Не пройдено'}</small>
                       <strong>{level.mapTitle}</strong>
-                      <em>{level.description}</em>
+                      <em>{battleMap.name}: {battleMap.description}</em>
                     </button>
                   );
                 })}
@@ -2095,6 +3330,21 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
 
       {screen === 'battle' && (
         <>
+      {practiceTutorialActive && (
+        <div className="practice-tutorial-panel">
+          <strong>Обучение в бою</strong>
+          <span>
+            {tutorialStep === 'selectTower' && 'Шаг 1: выбери башню слева.'}
+            {tutorialStep === 'placeTower' && 'Шаг 2: поставь башню на подсвеченную платформу.'}
+            {tutorialStep === 'startWave' && 'Шаг 3: запусти первую волну.'}
+            {tutorialStep === 'watchWave' && 'Шаг 4: наблюдай за дорогой, радиусом и наградами.'}
+            {tutorialStep === 'complete' && 'Готово: теперь можно играть самостоятельно.'}
+          </span>
+          <button className="ghost" type="button" onClick={() => closeTutorial('start')}>
+            Завершить
+          </button>
+        </div>
+      )}
       <div className="battle-layout">
         <div className="battle-side-panel">
           <div className="battle-control-panel">
@@ -2220,7 +3470,7 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
         <span className="board-clock-ruin" aria-hidden="true" />
         <span className="board-clock-hand hand-a" aria-hidden="true" />
         <span className="board-clock-hand hand-b" aria-hidden="true" />
-        {battleDecorations.map((decoration, index) => (
+        {selectedBattleMap.decorations.map((decoration, index) => (
           <span
             key={`${decoration.kind}-${index}`}
             className={`battle-decoration ${decoration.kind}`}
@@ -2237,10 +3487,15 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
           const towerStats = tower ? getTowerStats(tower) : null;
           const cellEnemies = enemiesByCell.get(cell) ?? [];
           const hitTower = towers.find((item) => item.lastTargetCell === cell && item.attackCount > 0);
-          const isPath = pathCells.includes(cell);
-          const canBuild = isBuildableCell(cell);
-          const isHighland = highlandCells.includes(cell);
+          const isPath = selectedBattleMap.pathCells.includes(cell);
+          const canBuild = isBuildableCell(cell, selectedBattleMap.buildCells);
+          const isHighland = selectedBattleMap.highlandCells.includes(cell);
           const isSelectedTower = tower?.id === selectedTowerId;
+          const isTutorialTarget =
+            practiceTutorialActive &&
+            (tutorialStep === 'placeTower' || tutorialStep === 'selectTower') &&
+            cell === tutorialBuildCell &&
+            !tower;
 
           return (
             <button
@@ -2250,9 +3505,10 @@ export function TimeTowerDefense({ userEmail }: { userEmail: string }) {
                 isPath ? 'path' : '',
                 canBuild ? 'build' : '',
                 isHighland ? 'highland' : '',
-                getTileDetailClass(cell),
+                getTileDetailClass(cell, selectedBattleMap),
                 tower ? 'has-tower' : '',
                 isSelectedTower ? 'selected-tower' : '',
+                isTutorialTarget ? 'tutorial-target' : '',
               ].join(' ')}
               type="button"
               onClick={() => handleCellClick(cell)}
