@@ -8,6 +8,9 @@ import chronoBlastSpriteSvg from '../assets/chrono-blast.svg?raw';
 import temporalSniperSpriteSvg from '../assets/temporal-sniper.svg?raw';
 import timeScoutSpriteSvg from '../assets/time-scout.svg?raw';
 import { supabase } from '../lib/supabase';
+import { LanguageStartScreen } from './LanguageStartScreen';
+import type { LanguageCode } from './LanguageStartScreen';
+import { WindowTransitionSplash } from './WindowTransitionSplash';
 import { easyMonsterIds, getEasyMonsterName, MonsterIcon } from './MonsterIcon';
 import type { EasyMonsterId } from './MonsterIcon';
 
@@ -66,6 +69,8 @@ type BossProfile = {
 };
 
 type GameScreen =
+  | 'welcome'
+  | 'transition'
   | 'profile'
   | 'tutorial'
   | 'start'
@@ -431,6 +436,7 @@ const levelMapStorageKey = 'chrono-defense-completed-levels';
 const achievementStatsStorageKey = 'chrono-defense-achievement-stats';
 const tutorialSeenStorageKey = 'chrono-defense-tutorial-seen';
 const playerNameStorageKey = 'chrono-defense-player-name';
+const languageStorageKey = 'chrono-defense-language';
 const tutorialBuildCell = 44;
 const movementThreshold = 8;
 const bossEnemyKindId: EasyMonsterId = 'tickingScarab';
@@ -1736,6 +1742,11 @@ function readSavedPlayerName() {
   return window.localStorage.getItem(playerNameStorageKey)?.trim() ?? '';
 }
 
+function readSavedLanguage(): LanguageCode {
+  const savedLanguage = window.localStorage.getItem(languageStorageKey);
+  return savedLanguage === 'ru' || savedLanguage === 'en' || savedLanguage === 'kk' ? savedLanguage : 'ru';
+}
+
 function savePlayerName(name: string) {
   const cleanName = name.trim();
   if (cleanName) {
@@ -1748,7 +1759,9 @@ function getAchievementProgress(achievement: Achievement, stats: AchievementStat
 }
 
 export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; userId?: string }) {
-  const [screen, setScreen] = useState<GameScreen>(() => (readTutorialSeen() ? 'start' : 'tutorial'));
+  const [screen, setScreen] = useState<GameScreen>('welcome');
+  const [language, setLanguage] = useState<LanguageCode>(readSavedLanguage);
+  const [welcomeExiting, setWelcomeExiting] = useState(false);
   const [playerName, setPlayerName] = useState(readSavedPlayerName);
   const [playerAge, setPlayerAge] = useState('');
   const [profileError, setProfileError] = useState('');
@@ -1791,6 +1804,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const boardRef = useRef<HTMLDivElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const backgroundMusicRef = useRef<BackgroundMusicEngine | null>(null);
+  const windowTransitionTimersRef = useRef<number[]>([]);
   const commentatorRequestRef = useRef(0);
   const runChallengeRef = useRef({ tookDamage: false, skippedWave: false });
   const cameraDragRef = useRef({
@@ -2024,10 +2038,16 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
   useEffect(() => {
     return () => {
+      windowTransitionTimersRef.current.forEach((timer) => window.clearTimeout(timer));
       stopBackgroundMusic(backgroundMusicRef.current);
       backgroundMusicRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(languageStorageKey, language);
+    document.documentElement.lang = language;
+  }, [language]);
 
   useEffect(() => {
     if (!userId || !supabase || retentionLoading) return;
@@ -2430,6 +2450,25 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     window.localStorage.setItem(tutorialSeenStorageKey, 'true');
     setTutorialSeen(true);
     setScreen(nextScreen);
+  }
+
+  function enterGameFromWelcome() {
+    if (welcomeExiting) return;
+
+    activateAudio();
+    setWelcomeExiting(true);
+
+    const nextScreen: GameScreen = tutorialSeen ? 'start' : 'tutorial';
+    const fadeTimer = window.setTimeout(() => {
+      setScreen('transition');
+    }, 620);
+    const openTimer = window.setTimeout(() => {
+      setWelcomeExiting(false);
+      setScreen(nextScreen);
+    }, 1780);
+
+    windowTransitionTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    windowTransitionTimersRef.current = [fadeTimer, openTimer];
   }
 
   function startPracticeTutorial() {
@@ -2920,6 +2959,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         <span className="time-shard shell-shard-b" />
         <span className="time-shard shell-shard-c" />
       </div>
+      {screen !== 'welcome' && screen !== 'transition' && (
       <div className="game-top">
         <div>
           <p className="hello">Игрок: {playerLabel}</p>
@@ -2931,6 +2971,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           <span className="difficulty-badge">Новая линия готова · {selectedDifficultyData.name}</span>
         )}
       </div>
+      )}
 
       {screen === 'battle' && baseHp === 0 && (
         <div className="retry-panel">
@@ -2940,6 +2981,17 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           </button>
         </div>
       )}
+
+      {screen === 'welcome' && (
+        <LanguageStartScreen
+          language={language}
+          isExiting={welcomeExiting}
+          onLanguageChange={setLanguage}
+          onStart={enterGameFromWelcome}
+        />
+      )}
+
+      {screen === 'transition' && <WindowTransitionSplash language={language} />}
 
       {screen === 'profile' && (
         <section className="profile-screen">
