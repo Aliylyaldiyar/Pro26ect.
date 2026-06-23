@@ -1227,9 +1227,43 @@ input {
   filter: drop-shadow(0 5px 5px rgba(34, 25, 18, 0.22));
 }
 
+.tower-model {
+  display: block;
+  width: 42px;
+  height: 56px;
+  overflow: visible;
+  user-select: none;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 5px rgba(34, 25, 18, 0.24));
+}
+
+.tower-model-shadow {
+  fill: rgba(24, 18, 14, 0.28);
+}
+
+.tower-model-legs,
+.tower-model-coat,
+.tower-model-core,
+.tower-model-head,
+.tower-model-hood,
+.tower-model-tool {
+  vector-effect: non-scaling-stroke;
+}
+
+.tower-model-face {
+  fill: none;
+}
+
+.tower-model-fallback {
+  font-weight: 950;
+}
+
 .tower-choice .tower-kind-sprite,
-.bestiary-item .tower-kind-sprite {
+.bestiary-item .tower-kind-sprite,
+.tower-choice .tower-model,
+.bestiary-item .tower-model {
   width: 170%;
+  height: 58px;
 }
 
 .tower-choice strong {
@@ -4027,15 +4061,26 @@ input {
 .board-stone .battle-decoration.hut,
 .board-stone .battle-decoration.volcano,
 .board-stone .battle-decoration.rockPile,
-.board-castle .battle-decoration.watchTower,
-.board-castle .battle-decoration.house,
-.board-castle .battle-decoration.mountain,
-.board-factory .battle-decoration.mineCart,
-.board-factory .battle-decoration.pipe,
-.board-factory .battle-decoration.factoryBlock,
+.board-ancient .battle-decoration.ancientColumn,
+.board-ancient .battle-decoration.timeTemple,
+.board-ancient .battle-decoration.aqueduct,
+.board-medieval .battle-decoration.watchTower,
+.board-medieval .battle-decoration.castleGate,
+.board-medieval .battle-decoration.house,
+.board-medieval .battle-decoration.mountain,
+.board-industrial .battle-decoration.mineCart,
+.board-industrial .battle-decoration.pipe,
+.board-industrial .battle-decoration.factoryBlock,
+.board-industrial .battle-decoration.steamEngine,
+.board-industrial .battle-decoration.gearworks,
 .board-future .battle-decoration.drone,
 .board-future .battle-decoration.reactor,
-.board-future .battle-decoration.energyPylon {
+.board-future .battle-decoration.energyPylon,
+.board-future .battle-decoration.holoGate,
+.board-cyber .battle-decoration.dataCore,
+.board-cyber .battle-decoration.neonSpire,
+.board-cyber .battle-decoration.holoGate,
+.board-cyber .battle-decoration.energyPylon {
   display: block;
 }
 
@@ -4116,11 +4161,97 @@ input {
     -13px 18px 0 -8px #5f5749;
 }
 
+.battle-decoration.ancientColumn::before {
+  inset: 10% 34% 12%;
+  border-radius: 8px 8px 4px 4px;
+  background:
+    linear-gradient(90deg, rgba(83, 55, 24, 0.22), transparent 22% 78%, rgba(83, 55, 24, 0.22)),
+    repeating-linear-gradient(90deg, #f4dfad 0 9px, #b88945 10px 15px);
+  box-shadow:
+    -26px 8px 0 -5px #d0a363,
+    26px 8px 0 -5px #d0a363,
+    0 18px 0 -6px #7d552b,
+    0 26px 14px rgba(65, 41, 20, 0.32);
+}
+
+.battle-decoration.ancientColumn::after {
+  inset: 4% 20% 78%;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #fff0bc, #a97636);
+  box-shadow:
+    0 74px 0 -1px #8f642f,
+    0 82px 0 -4px #5c3c20;
+}
+
+.battle-decoration.timeTemple {
+  width: 118%;
+}
+
+.battle-decoration.timeTemple::before {
+  inset: 34% 6% 12%;
+  border-radius: 8px 8px 4px 4px;
+  background:
+    linear-gradient(90deg, #8e642f 0 10%, transparent 10% 18%, #e7c276 18% 28%, transparent 28% 36%, #e7c276 36% 46%, transparent 46% 54%, #e7c276 54% 64%, transparent 64% 72%, #e7c276 72% 82%, transparent 82% 90%, #8e642f 90%),
+    linear-gradient(180deg, #f1d797, #9a682f);
+  box-shadow: 0 16px 0 -4px #6e4724, 0 24px 14px rgba(67, 42, 20, 0.3);
+}
+
+.battle-decoration.timeTemple::after {
+  inset: 6% 0 58%;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  background:
+    radial-gradient(circle at 50% 72%, #fff8c7 0 12%, transparent 13%),
+    linear-gradient(135deg, #f4d07d, #7c4d25);
+}
+
+.battle-decoration.aqueduct::before {
+  inset: 36% 4% 26%;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 16% 82%, transparent 0 14%, #cba164 15% 24%, transparent 25%),
+    radial-gradient(circle at 50% 82%, transparent 0 14%, #cba164 15% 24%, transparent 25%),
+    radial-gradient(circle at 84% 82%, transparent 0 14%, #cba164 15% 24%, transparent 25%),
+    linear-gradient(180deg, #f0d69c, #8a5f34);
+  box-shadow: 0 15px 0 -5px #65401f, 0 22px 14px rgba(65, 41, 20, 0.26);
+}
+
+.battle-decoration.aqueduct::after {
+  inset: 24% 2% 58%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #83d7e6, #fff8c7, #83d7e6);
+  opacity: 0.8;
+  box-shadow: 0 0 14px rgba(131, 215, 230, 0.45);
+}
+
 .battle-decoration.watchTower::before {
   inset: 6% 28% 10%;
   background:
     linear-gradient(90deg, transparent 0 22%, #6f4e31 23% 33%, transparent 34% 64%, #6f4e31 65% 75%, transparent 76%),
     linear-gradient(180deg, #a0784c 0 25%, transparent 26% 100%);
+}
+
+.battle-decoration.castleGate {
+  width: 118%;
+}
+
+.battle-decoration.castleGate::before {
+  inset: 26% 4% 12%;
+  border-radius: 6px 6px 4px 4px;
+  background:
+    linear-gradient(90deg, #5b6170 0 18%, transparent 19% 28%, #9aa0ad 29% 42%, transparent 43% 57%, #9aa0ad 58% 71%, transparent 72% 81%, #5b6170 82%),
+    linear-gradient(180deg, #b6bcc8, #606878);
+  box-shadow:
+    -24px -8px 0 -6px #7a8190,
+    24px -8px 0 -6px #7a8190,
+    0 18px 0 -5px #3d4350;
+}
+
+.battle-decoration.castleGate::after {
+  inset: 52% 34% 12%;
+  border-radius: 50% 50% 4px 4px;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.24), transparent 22% 78%, rgba(0, 0, 0, 0.24)),
+    #2d2430;
 }
 
 .battle-decoration.watchTower::after {
@@ -4200,6 +4331,49 @@ input {
   box-shadow: -22px 10px 0 -6px #614a3d;
 }
 
+.battle-decoration.steamEngine::before {
+  inset: 34% 5% 24%;
+  border-radius: 12px 18px 10px 10px;
+  background:
+    radial-gradient(circle at 28% 70%, #1f1714 0 11%, transparent 12%),
+    radial-gradient(circle at 72% 70%, #1f1714 0 11%, transparent 12%),
+    linear-gradient(180deg, #b67b4d, #4b3428);
+  box-shadow:
+    0 -20px 0 -8px #6d4f3b,
+    22px -24px 0 -10px #8c654a;
+}
+
+.battle-decoration.steamEngine::after {
+  left: 18%;
+  top: 2%;
+  width: 58%;
+  height: 44%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 55%, rgba(255, 255, 255, 0.72), transparent 28%),
+    radial-gradient(circle at 68% 34%, rgba(255, 255, 255, 0.52), transparent 30%);
+  animation: battle-smoke-rise 2.4s ease-in-out infinite;
+}
+
+.battle-decoration.gearworks::before {
+  inset: 12%;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(from 0deg, #d2a15f 0 10deg, #4b3428 11deg 20deg),
+    radial-gradient(circle, #3f3631 0 28%, #d2a15f 29% 46%, #3f3631 47%);
+  box-shadow: 0 12px 0 -5px #4b3428, 0 0 18px rgba(210, 161, 95, 0.36);
+  animation: battle-gear-spin 5s linear infinite;
+}
+
+.battle-decoration.gearworks::after {
+  inset: 34%;
+  border-radius: 50%;
+  background: #2a211d;
+  box-shadow:
+    -28px 18px 0 -10px #9b7356,
+    30px -12px 0 -12px #b98955;
+}
+
 .battle-decoration.drone {
   width: 86%;
   animation: battle-drone-float 3s ease-in-out infinite;
@@ -4246,6 +4420,68 @@ input {
   animation: battle-data-flow 1.15s linear infinite;
 }
 
+.battle-decoration.holoGate {
+  width: 108%;
+}
+
+.battle-decoration.holoGate::before {
+  inset: 12% 20% 8%;
+  border: 5px solid rgba(117, 255, 240, 0.82);
+  border-bottom-width: 12px;
+  border-radius: 50% 50% 8px 8px;
+  background:
+    radial-gradient(circle at 50% 46%, rgba(255, 255, 255, 0.55), transparent 14%),
+    radial-gradient(circle, rgba(117, 255, 240, 0.18), transparent 62%);
+  box-shadow:
+    0 0 18px rgba(117, 255, 240, 0.7),
+    inset 0 0 18px rgba(117, 255, 240, 0.38);
+  animation: battle-reactor-pulse 1.8s ease-in-out infinite;
+}
+
+.battle-decoration.holoGate::after {
+  inset: 26% 34% 22%;
+  border-radius: 999px;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.8) 0 4px, transparent 5px 12px);
+  opacity: 0.55;
+  animation: battle-data-flow 1s linear infinite;
+}
+
+.battle-decoration.dataCore::before {
+  inset: 8%;
+  border-radius: 22%;
+  background:
+    radial-gradient(circle at 50% 48%, #fff 0 8%, #9b78ff 9% 23%, #282047 24% 46%, transparent 47%),
+    conic-gradient(from 0deg, #5ec8d6, #9b78ff, #33235e, #5ec8d6);
+  box-shadow:
+    0 0 24px rgba(155, 120, 255, 0.74),
+    inset 0 0 18px rgba(94, 200, 214, 0.45);
+  animation: battle-data-core 2.1s ease-in-out infinite;
+}
+
+.battle-decoration.dataCore::after {
+  inset: 20%;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  animation: battle-drone-ring 1.4s linear infinite;
+}
+
+.battle-decoration.neonSpire::before {
+  inset: 2% 28% 4%;
+  clip-path: polygon(50% 0, 76% 18%, 66% 100%, 34% 100%, 24% 18%);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.42), transparent 24% 76%, rgba(0, 0, 0, 0.24)),
+    linear-gradient(180deg, #9b78ff, #29355f);
+  box-shadow:
+    0 0 22px rgba(155, 120, 255, 0.7),
+    0 18px 0 -6px #14182d;
+}
+
+.battle-decoration.neonSpire::after {
+  inset: 12% 38% 12%;
+  background: repeating-linear-gradient(0deg, #5ec8d6 0 5px, transparent 5px 13px);
+  animation: battle-data-flow 1s linear infinite;
+}
+
 .tile {
   position: relative;
   z-index: 3;
@@ -4286,6 +4522,151 @@ input {
   transform: rotateX(-90deg);
   transform-origin: top;
   opacity: 0.86;
+}
+
+.board-ancient {
+  background:
+    linear-gradient(135deg, rgba(255, 244, 210, 0.18), transparent 42%),
+    linear-gradient(135deg, #c9984f, #80613a);
+}
+
+.board-medieval {
+  background:
+    linear-gradient(135deg, rgba(218, 230, 242, 0.14), transparent 42%),
+    linear-gradient(135deg, #60728a, #394454);
+}
+
+.board-industrial {
+  background:
+    linear-gradient(135deg, rgba(255, 178, 98, 0.14), transparent 42%),
+    linear-gradient(135deg, #745a4a, #3c312c);
+}
+
+.board-future {
+  background:
+    linear-gradient(135deg, rgba(94, 220, 230, 0.18), transparent 42%),
+    linear-gradient(135deg, #4e8199, #263e4d);
+}
+
+.board-cyber {
+  background:
+    linear-gradient(135deg, rgba(155, 120, 255, 0.2), transparent 42%),
+    linear-gradient(135deg, #4a3d78, #1e1b34);
+}
+
+.board-ancient .tile {
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 244, 210, 0.24), transparent 32%),
+    linear-gradient(135deg, #c7a15d, #8d6b3e);
+}
+
+.board-medieval .tile {
+  background:
+    radial-gradient(circle at 34% 28%, rgba(226, 236, 244, 0.2), transparent 32%),
+    linear-gradient(135deg, #8190a4, #4a5568);
+}
+
+.board-industrial .tile {
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 183, 95, 0.08) 0 6px, transparent 6px 13px),
+    linear-gradient(135deg, #715745, #40342e);
+}
+
+.board-future .tile,
+.board-cyber .tile {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08), transparent 32% 68%, rgba(255, 255, 255, 0.05)),
+    repeating-linear-gradient(0deg, rgba(116, 255, 242, 0.12) 0 2px, transparent 2px 12px),
+    linear-gradient(135deg, #355c70, #203441);
+}
+
+.board-cyber .tile {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08), transparent 32% 68%, rgba(255, 255, 255, 0.05)),
+    repeating-linear-gradient(90deg, rgba(155, 120, 255, 0.16) 0 2px, transparent 2px 13px),
+    linear-gradient(135deg, #312a5b, #17152a);
+}
+
+.board-ancient .tile.path {
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 247, 210, 0.28) 0 8px, transparent 8px 16px),
+    linear-gradient(135deg, #e0bd78, #a87636);
+}
+
+.board-medieval .tile.path {
+  background:
+    radial-gradient(circle at 22% 32%, rgba(255, 255, 255, 0.18) 0 10%, transparent 12%),
+    radial-gradient(circle at 70% 66%, rgba(0, 0, 0, 0.14) 0 12%, transparent 14%),
+    linear-gradient(135deg, #9ba3ad, #606774);
+}
+
+.board-industrial .tile.path {
+  background:
+    repeating-linear-gradient(90deg, rgba(38, 30, 26, 0.25) 0 5px, transparent 5px 15px),
+    linear-gradient(135deg, #9b7356, #5a4032);
+}
+
+.board-future .tile.path,
+.board-cyber .tile.path {
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent),
+    repeating-linear-gradient(90deg, rgba(117, 255, 240, 0.22) 0 5px, transparent 5px 18px),
+    linear-gradient(135deg, #2b6f86, #183341);
+  box-shadow:
+    inset 0 0 0 1px rgba(194, 255, 250, 0.28),
+    0 5px 0 #15323d,
+    0 0 18px rgba(117, 255, 240, 0.22);
+}
+
+.board-cyber .tile.path {
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent),
+    repeating-linear-gradient(90deg, rgba(155, 120, 255, 0.28) 0 5px, transparent 5px 18px),
+    linear-gradient(135deg, #423078, #1d1c3f);
+  box-shadow:
+    inset 0 0 0 1px rgba(206, 190, 255, 0.3),
+    0 5px 0 #181335,
+    0 0 18px rgba(155, 120, 255, 0.28);
+}
+
+.board-ancient .tile.build,
+.board-ancient .tile.highland {
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 248, 199, 0.5), transparent 38%),
+    linear-gradient(135deg, #d6b36f, #9b7138);
+}
+
+.board-medieval .tile.build,
+.board-medieval .tile.highland {
+  background:
+    radial-gradient(circle at 50% 42%, rgba(236, 245, 255, 0.34), transparent 38%),
+    linear-gradient(135deg, #8c9aab, #596272);
+}
+
+.board-industrial .tile.build,
+.board-industrial .tile.highland {
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 184, 95, 0.28), transparent 38%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.08) 0 5px, transparent 5px 12px),
+    linear-gradient(135deg, #82604b, #4b3930);
+}
+
+.board-future .tile.build,
+.board-cyber .tile.build,
+.board-future .tile.highland,
+.board-cyber .tile.highland {
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.42), transparent 36%),
+    linear-gradient(135deg, rgba(117, 255, 240, 0.32), rgba(42, 80, 98, 0.8)),
+    #25475a;
+}
+
+.board-cyber .tile.build,
+.board-cyber .tile.highland {
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.38), transparent 36%),
+    linear-gradient(135deg, rgba(155, 120, 255, 0.36), rgba(41, 34, 83, 0.86)),
+    #241f4a;
 }
 
 .tile::before {
@@ -4337,6 +4718,19 @@ input {
   border: 1px dashed color-mix(in srgb, var(--era) 45%, rgba(67, 88, 54, 0.34));
   border-radius: 50%;
   opacity: 0.66;
+}
+
+.tile.wrong-placement {
+  cursor: not-allowed;
+  filter: saturate(0.72) brightness(0.88);
+}
+
+.tile.wrong-placement::before {
+  border-color: rgba(128, 73, 58, 0.45);
+  background:
+    linear-gradient(45deg, transparent 0 42%, rgba(128, 73, 58, 0.42) 43% 49%, transparent 50%),
+    linear-gradient(-45deg, transparent 0 42%, rgba(128, 73, 58, 0.34) 43% 49%, transparent 50%);
+  opacity: 0.78;
 }
 
 .tile.build-plate {
@@ -4523,6 +4917,8 @@ input {
   border-radius: 999px 999px 8px 8px;
   background: linear-gradient(180deg, color-mix(in srgb, var(--era) 58%, #fff), color-mix(in srgb, var(--era) 54%, #5d4430));
   transform: translateZ(-8px);
+  transform-origin: 50% 100%;
+  animation: tower-base-breathe 3.2s ease-in-out infinite;
 }
 
 .tower.level-2 {
@@ -4571,6 +4967,8 @@ input {
   color: #fff;
   font-size: 11px;
   line-height: 1;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--era) 40%, transparent);
+  animation: tower-level-glint 4.4s ease-in-out infinite;
 }
 
 .tower .tower-kind-sprite {
@@ -4581,6 +4979,31 @@ input {
   max-width: none;
   object-fit: contain;
   transform: translateY(-24%);
+  transform-origin: 50% 72%;
+  animation: tower-idle-float 3.1s ease-in-out infinite, tower-sprite-glow 5.2s ease-in-out infinite;
+}
+
+.tower .tower-model {
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  z-index: 4;
+  width: 108%;
+  height: 158%;
+  transform: translateX(-50%) translateY(-18%);
+  filter:
+    drop-shadow(0 10px 7px rgba(0, 0, 0, 0.28))
+    drop-shadow(0 0 8px color-mix(in srgb, var(--tower-accent, var(--era)) 32%, transparent));
+}
+
+.tower.level-2 .tower-model {
+  width: 116%;
+  height: 166%;
+}
+
+.tower.level-3 .tower-model {
+  width: 124%;
+  height: 176%;
 }
 
 .tower-arrow {
@@ -4590,6 +5013,10 @@ input {
 }
 
 .tower-arrow.attacking .tower-kind-sprite {
+  animation: time-scout-strike 620ms cubic-bezier(0.16, 0.96, 0.18, 1.2), tower-sprite-flash 620ms ease-out;
+}
+
+.tower-arrow.attacking .tower-model {
   animation: time-scout-strike 420ms cubic-bezier(0.18, 0.9, 0.2, 1.2);
 }
 
@@ -4604,7 +5031,7 @@ input {
   filter:
     drop-shadow(0 0 10px rgba(248, 224, 150, 0.85))
     drop-shadow(0 0 18px rgba(216, 172, 84, 0.45));
-  animation: time-scout-impact 420ms ease-out;
+  animation: time-scout-impact 620ms ease-out, tower-ring-spin 620ms ease-out;
 }
 
 .tower-arrow.attacking .tower-level {
@@ -4627,10 +5054,17 @@ input {
 .tower-slow.attacking::after {
   inset: -56%;
   border-color: rgba(130, 240, 231, 0.78);
+  background:
+    repeating-conic-gradient(from 0deg, transparent 0 13deg, rgba(160, 255, 247, 0.34) 14deg 18deg, transparent 19deg 34deg),
+    radial-gradient(circle, rgba(190, 255, 251, 0.36) 0 20%, transparent 62%);
   box-shadow:
     0 0 0 8px rgba(117, 214, 201, 0.16),
     0 0 24px rgba(117, 214, 201, 0.52);
-  animation: chrono-blast-pulse 520ms ease-out;
+  animation: chrono-blast-pulse 760ms ease-out, tower-ring-spin 760ms ease-out;
+}
+
+.tower-slow.attacking .tower-kind-sprite {
+  animation: tower-control-cast 760ms ease-out, tower-sprite-flash 760ms ease-out;
 }
 
 .tower-blast {
@@ -4651,9 +5085,14 @@ input {
   border: 0;
   background:
     radial-gradient(circle at 78% 42%, #fff3bc 0 7%, #efb767 8% 15%, transparent 27%),
+    radial-gradient(circle at 34% 68%, rgba(255, 246, 211, 0.72) 0 5%, transparent 18%),
     conic-gradient(from 12deg, transparent 0 10%, rgba(255, 226, 166, 0.88) 11% 15%, transparent 16% 38%, rgba(224, 147, 73, 0.55) 39% 43%, transparent 44%);
   filter: drop-shadow(0 0 14px rgba(232, 166, 84, 0.72));
-  animation: temporal-sniper-shot 480ms ease-out;
+  animation: temporal-sniper-shot 720ms ease-out, tower-ring-spin 720ms ease-out;
+}
+
+.tower-blast.attacking .tower-kind-sprite {
+  animation: tower-heavy-recoil 720ms ease-out, tower-sprite-flash 720ms ease-out;
 }
 
 .tower-rift,
@@ -4696,6 +5135,39 @@ input {
   filter: drop-shadow(0 8px 8px rgba(0, 0, 0, 0.28));
 }
 
+.tower-hourglass .tower-kind-sprite,
+.tower-beacon .tower-kind-sprite,
+.tower-archive .tower-kind-sprite {
+  animation: tower-soft-float 3.8s ease-in-out infinite, tower-sprite-glow 5.2s ease-in-out infinite;
+}
+
+.tower-forge .tower-kind-sprite,
+.tower-gravity .tower-kind-sprite {
+  animation: tower-mechanical-hum 2.6s ease-in-out infinite, tower-sprite-glow 5.2s ease-in-out infinite;
+}
+
+.tower-pulsar .tower-kind-sprite,
+.tower-mirror .tower-kind-sprite,
+.tower-sun .tower-kind-sprite {
+  animation: tower-energy-pulse 3.2s ease-in-out infinite, tower-sprite-glow 5.2s ease-in-out infinite;
+}
+
+.tower-slow .tower-model,
+.tower-blast .tower-model,
+.tower-rift .tower-model,
+.tower-hourglass .tower-model,
+.tower-forge .tower-model,
+.tower-mirror .tower-model,
+.tower-pulsar .tower-model,
+.tower-beacon .tower-model,
+.tower-archive .tower-model,
+.tower-sun .tower-model,
+.tower-gravity .tower-model {
+  filter:
+    drop-shadow(0 10px 7px rgba(0, 0, 0, 0.28))
+    drop-shadow(0 0 10px color-mix(in srgb, var(--tower-accent, var(--era)) 42%, transparent));
+}
+
 .tower-rift.attacking::after,
 .tower-hourglass.attacking::after,
 .tower-forge.attacking::after,
@@ -4710,12 +5182,67 @@ input {
   box-shadow:
     0 0 0 8px color-mix(in srgb, var(--tower-accent) 18%, transparent),
     0 0 24px color-mix(in srgb, var(--tower-accent) 58%, transparent);
-  animation: chrono-blast-pulse 520ms ease-out;
+  background:
+    repeating-conic-gradient(from 0deg, transparent 0 16deg, color-mix(in srgb, var(--tower-accent) 32%, transparent) 17deg 22deg, transparent 23deg 40deg),
+    radial-gradient(circle, color-mix(in srgb, var(--tower-accent) 24%, transparent) 0 18%, transparent 62%);
+  animation: chrono-blast-pulse 780ms ease-out, tower-ring-spin 780ms ease-out;
 }
 
 .tower-pulsar.attacking::after,
 .tower-rift.attacking::after {
   inset: -82%;
+}
+
+.tower-rift.attacking::after {
+  background:
+    linear-gradient(105deg, transparent 0 34%, rgba(255, 255, 255, 0.82) 35% 39%, transparent 40% 100%),
+    linear-gradient(74deg, transparent 0 44%, color-mix(in srgb, var(--tower-accent) 70%, transparent) 45% 50%, transparent 51% 100%),
+    radial-gradient(circle, color-mix(in srgb, var(--tower-accent) 24%, transparent), transparent 64%);
+}
+
+.tower-hourglass.attacking::after {
+  background:
+    repeating-conic-gradient(from 20deg, rgba(255, 242, 178, 0.5) 0 7deg, transparent 8deg 22deg),
+    radial-gradient(circle, rgba(255, 219, 129, 0.34), transparent 62%);
+}
+
+.tower-forge.attacking::after {
+  background:
+    radial-gradient(circle at 34% 34%, rgba(255, 243, 213, 0.85) 0 6%, transparent 20%),
+    radial-gradient(circle at 70% 58%, rgba(255, 174, 78, 0.7) 0 8%, transparent 24%),
+    conic-gradient(from 0deg, transparent 0 12%, rgba(255, 183, 95, 0.44) 13% 18%, transparent 19% 42%, rgba(255, 119, 70, 0.34) 43% 49%, transparent 50%);
+}
+
+.tower-mirror.attacking::after {
+  background:
+    linear-gradient(120deg, transparent 0 40%, rgba(255, 255, 255, 0.9) 41% 45%, transparent 46%),
+    linear-gradient(38deg, transparent 0 45%, rgba(156, 238, 255, 0.52) 46% 52%, transparent 53%),
+    radial-gradient(circle, rgba(156, 238, 255, 0.22), transparent 64%);
+}
+
+.tower-pulsar.attacking::after {
+  background:
+    repeating-radial-gradient(circle, rgba(117, 255, 240, 0.34) 0 5%, transparent 6% 13%),
+    conic-gradient(from 10deg, transparent 0 9%, rgba(117, 255, 240, 0.56) 10% 14%, transparent 15% 30%, rgba(255, 255, 255, 0.42) 31% 35%, transparent 36%);
+}
+
+.tower-beacon.attacking::after {
+  background:
+    radial-gradient(circle, rgba(255, 252, 210, 0.72) 0 10%, transparent 42%),
+    repeating-conic-gradient(from 45deg, rgba(255, 248, 199, 0.45) 0 5deg, transparent 6deg 24deg);
+}
+
+.tower-archive.attacking::after {
+  background:
+    linear-gradient(90deg, transparent 0 24%, rgba(255, 255, 255, 0.58) 25% 28%, transparent 29% 100%),
+    linear-gradient(135deg, transparent 0 42%, rgba(217, 195, 255, 0.5) 43% 48%, transparent 49% 100%),
+    radial-gradient(circle, rgba(217, 195, 255, 0.24), transparent 62%);
+}
+
+.tower-gravity.attacking::after {
+  background:
+    repeating-radial-gradient(circle, transparent 0 13%, rgba(138, 167, 255, 0.28) 14% 18%, transparent 19% 28%),
+    conic-gradient(from 0deg, rgba(138, 167, 255, 0.34), transparent 20%, rgba(16, 22, 34, 0.48) 36%, transparent 58%, rgba(138, 167, 255, 0.34));
 }
 
 .tower-sun.attacking::after {
@@ -4725,6 +5252,22 @@ input {
     radial-gradient(circle at 50% 50%, #fff9b0 0 8%, #ffe15b 9% 17%, transparent 34%),
     conic-gradient(from 0deg, transparent 0 9%, rgba(255, 240, 106, 0.86) 10% 13%, transparent 14% 32%, rgba(255, 184, 95, 0.64) 33% 36%, transparent 37%);
   filter: drop-shadow(0 0 18px rgba(255, 220, 90, 0.82));
+  animation: tower-solar-burst 900ms ease-out;
+}
+
+.tower-rift.attacking .tower-kind-sprite,
+.tower-hourglass.attacking .tower-kind-sprite,
+.tower-forge.attacking .tower-kind-sprite,
+.tower-mirror.attacking .tower-kind-sprite,
+.tower-pulsar.attacking .tower-kind-sprite,
+.tower-beacon.attacking .tower-kind-sprite,
+.tower-archive.attacking .tower-kind-sprite,
+.tower-gravity.attacking .tower-kind-sprite {
+  animation: tower-ability-cast 780ms ease-out, tower-sprite-flash 780ms ease-out;
+}
+
+.tower-sun.attacking .tower-kind-sprite {
+  animation: tower-solar-cast 900ms ease-out, tower-sprite-flash 900ms ease-out;
 }
 
 .hit-spark {
@@ -5265,6 +5808,33 @@ input {
   }
 }
 
+@keyframes battle-gear-spin {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+
+  50% {
+    transform: rotate(180deg) scale(1.04);
+  }
+
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes battle-data-core {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    filter: brightness(1);
+  }
+
+  50% {
+    transform: translateY(-5px) scale(1.08);
+    filter: brightness(1.25);
+  }
+}
+
 @keyframes time-warp {
   0%,
   100% {
@@ -5665,16 +6235,247 @@ input {
 
 @keyframes time-scout-strike {
   0% {
-    transform: translateY(-4px) translateX(0) rotate(0deg) scale(1);
+    transform: translateY(-24%) translateX(0) rotate(0deg) scale(1);
   }
   32% {
-    transform: translateY(-8px) translateX(12px) rotate(-7deg) scale(1.12);
+    transform: translateY(-30%) translateX(12px) rotate(-7deg) scale(1.12);
   }
   58% {
-    transform: translateY(-5px) translateX(-3px) rotate(4deg) scale(0.98);
+    transform: translateY(-25%) translateX(-3px) rotate(4deg) scale(0.98);
   }
   100% {
-    transform: translateY(-4px) translateX(0) rotate(0deg) scale(1);
+    transform: translateY(-24%) translateX(0) rotate(0deg) scale(1);
+  }
+}
+
+@keyframes tower-idle-float {
+  0% {
+    transform: translateY(-24%) rotate(-1deg) scale(1);
+  }
+  24% {
+    transform: translateY(-28%) rotate(1.2deg) scale(1.025);
+  }
+  52% {
+    transform: translateY(-30%) rotate(-0.4deg) scale(1.04);
+  }
+  78% {
+    transform: translateY(-26%) rotate(1.8deg) scale(1.01);
+  }
+  100% {
+    transform: translateY(-24%) rotate(-1deg) scale(1);
+  }
+}
+
+@keyframes tower-soft-float {
+  0% {
+    transform: translateY(-24%) rotate(0deg) scale(1);
+    filter: drop-shadow(0 8px 8px rgba(0, 0, 0, 0.28));
+  }
+  34% {
+    transform: translateY(-31%) rotate(2deg) scale(1.04);
+    filter: drop-shadow(0 12px 10px rgba(0, 0, 0, 0.24));
+  }
+  68% {
+    transform: translateY(-27%) rotate(-1.4deg) scale(1.015);
+    filter: drop-shadow(0 9px 9px rgba(0, 0, 0, 0.27));
+  }
+  100% {
+    transform: translateY(-24%) rotate(0deg) scale(1);
+    filter: drop-shadow(0 8px 8px rgba(0, 0, 0, 0.28));
+  }
+}
+
+@keyframes tower-mechanical-hum {
+  0% {
+    transform: translateY(-24%) rotate(-0.8deg) scale(1);
+  }
+  18% {
+    transform: translateY(-26%) rotate(1.4deg) scale(1.025);
+  }
+  30% {
+    transform: translateY(-23%) rotate(-1.8deg) scale(0.99);
+  }
+  52% {
+    transform: translateY(-27%) rotate(1deg) scale(1.025);
+  }
+  74% {
+    transform: translateY(-22%) rotate(-1.2deg) scale(0.995);
+  }
+  100% {
+    transform: translateY(-24%) rotate(-0.8deg) scale(1);
+  }
+}
+
+@keyframes tower-energy-pulse {
+  0% {
+    transform: translateY(-24%) scale(1);
+    filter: drop-shadow(0 8px 8px rgba(0, 0, 0, 0.28));
+  }
+  30% {
+    transform: translateY(-30%) rotate(-2deg) scale(1.07);
+    filter:
+      drop-shadow(0 8px 8px rgba(0, 0, 0, 0.24))
+      drop-shadow(0 0 10px color-mix(in srgb, var(--tower-accent, var(--era)) 52%, transparent));
+  }
+  58% {
+    transform: translateY(-26%) rotate(2deg) scale(1.02);
+    filter:
+      drop-shadow(0 8px 8px rgba(0, 0, 0, 0.26))
+      drop-shadow(0 0 6px color-mix(in srgb, var(--tower-accent, var(--era)) 34%, transparent));
+  }
+  82% {
+    transform: translateY(-29%) rotate(0deg) scale(1.05);
+  }
+  100% {
+    transform: translateY(-24%) scale(1);
+    filter: drop-shadow(0 8px 8px rgba(0, 0, 0, 0.28));
+  }
+}
+
+@keyframes tower-control-cast {
+  0% {
+    transform: translateY(-23%) scale(1);
+  }
+  22% {
+    transform: translateY(-31%) scale(1.16) rotate(-7deg);
+  }
+  48% {
+    transform: translateY(-25%) scale(0.96) rotate(5deg);
+  }
+  72% {
+    transform: translateY(-28%) scale(1.07) rotate(-2deg);
+  }
+  100% {
+    transform: translateY(-23%) scale(1);
+  }
+}
+
+@keyframes tower-heavy-recoil {
+  0% {
+    transform: translateY(-23%) translateX(0) rotate(0deg) scale(1);
+  }
+  20% {
+    transform: translateY(-29%) translateX(9px) rotate(-7deg) scale(1.1);
+  }
+  42% {
+    transform: translateY(-22%) translateX(-12px) rotate(6deg) scale(0.96);
+  }
+  68% {
+    transform: translateY(-25%) translateX(4px) rotate(-2deg) scale(1.03);
+  }
+  100% {
+    transform: translateY(-23%) translateX(0) rotate(0deg) scale(1);
+  }
+}
+
+@keyframes tower-ability-cast {
+  0% {
+    transform: translateY(-24%) rotate(0deg) scale(1);
+  }
+  20% {
+    transform: translateY(-34%) rotate(-8deg) scale(1.16);
+  }
+  44% {
+    transform: translateY(-27%) rotate(5deg) scale(0.96);
+  }
+  70% {
+    transform: translateY(-30%) rotate(2deg) scale(1.06);
+  }
+  100% {
+    transform: translateY(-24%) rotate(0deg) scale(1);
+  }
+}
+
+@keyframes tower-solar-cast {
+  0%,
+  100% {
+    transform: translateY(-24%) rotate(0deg) scale(1);
+    filter: drop-shadow(0 8px 8px rgba(0, 0, 0, 0.28));
+  }
+  45% {
+    transform: translateY(-34%) rotate(8deg) scale(1.22);
+    filter:
+      drop-shadow(0 10px 8px rgba(0, 0, 0, 0.22))
+      drop-shadow(0 0 18px rgba(255, 230, 110, 0.82));
+  }
+}
+
+@keyframes tower-base-breathe {
+  0%,
+  100% {
+    transform: translateZ(-8px) scaleX(1) scaleY(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: translateZ(-8px) scaleX(1.08) scaleY(0.94);
+    filter: brightness(1.08);
+  }
+}
+
+@keyframes tower-level-glint {
+  0%,
+  72%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--era) 40%, transparent);
+    transform: scale(1);
+  }
+  82% {
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--era) 16%, transparent),
+      0 0 12px color-mix(in srgb, var(--era) 46%, transparent);
+    transform: scale(1.12);
+  }
+}
+
+@keyframes tower-sprite-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 8px 8px rgba(0, 0, 0, 0.28));
+  }
+  50% {
+    filter:
+      drop-shadow(0 8px 8px rgba(0, 0, 0, 0.24))
+      drop-shadow(0 0 8px color-mix(in srgb, var(--tower-accent, var(--era)) 32%, transparent));
+  }
+}
+
+@keyframes tower-sprite-flash {
+  0%,
+  100% {
+    filter: drop-shadow(0 8px 8px rgba(0, 0, 0, 0.28));
+  }
+  34% {
+    filter:
+      drop-shadow(0 8px 8px rgba(0, 0, 0, 0.18))
+      drop-shadow(0 0 16px color-mix(in srgb, var(--tower-accent, var(--era)) 68%, white));
+  }
+}
+
+@keyframes tower-ring-spin {
+  0% {
+    rotate: -28deg;
+  }
+  100% {
+    rotate: 84deg;
+  }
+}
+
+@keyframes tower-solar-burst {
+  0% {
+    opacity: 0;
+    transform: scale(0.2) rotate(-28deg);
+  }
+  24% {
+    opacity: 1;
+    transform: scale(0.86) rotate(10deg);
+  }
+  58% {
+    opacity: 0.82;
+    transform: scale(1.18) rotate(34deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.75) rotate(72deg);
   }
 }
 
@@ -10703,6 +11504,53 @@ input {
 .tablet-level-card em {
   background: rgba(255, 255, 255, 0.075);
   color: rgba(255, 250, 240, 0.86);
+}
+
+.performance-mode .time-atmosphere,
+.performance-mode .board-clock-ruin,
+.performance-mode .board-clock-hand,
+.performance-mode .time-ring,
+.performance-mode .late,
+.performance-mode .map-clock-fracture,
+.performance-mode .dock-clock-fragment {
+  display: none;
+}
+
+.performance-mode,
+.performance-mode *,
+.performance-mode *::before,
+.performance-mode *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}
+
+.performance-mode .board,
+.performance-mode .tile,
+.performance-mode .tower,
+.performance-mode .enemy,
+.performance-mode .battle-decoration,
+.performance-mode .enemy-core,
+.performance-mode .game-hud,
+.performance-mode .battle-dock {
+  filter: none !important;
+  backdrop-filter: none !important;
+  transition: none !important;
+}
+
+.performance-mode .battle-decoration.drone,
+.performance-mode .battle-decoration.energyPylon,
+.performance-mode .battle-decoration.reactor,
+.performance-mode .battle-decoration.pipe::before,
+.performance-mode .battle-decoration.pipe::after {
+  box-shadow: none !important;
+}
+
+.time-loop-button {
+  border: 1px solid rgba(185, 138, 74, 0.45);
+  background:
+    linear-gradient(135deg, rgba(255, 250, 240, 0.96), rgba(232, 220, 188, 0.92));
+  color: #2f2618;
 }
 
 @media (max-width: 700px) {

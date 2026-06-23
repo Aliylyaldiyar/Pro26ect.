@@ -1,0 +1,30 @@
+<svg width="220" height="220" viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="shadow" x="-30%" y="-20%" width="160%" height="160%" color-interpolation-filters="sRGB"><feDropShadow dx="0" dy="8" stdDeviation="5" flood-color="#10091a" flood-opacity="0.3"/></filter>
+    <radialGradient id="pageGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(110 103) rotate(90) scale(86)"><stop stop-color="#fff"/><stop offset="0.32" stop-color="#d9c3ff"/><stop offset="0.74" stop-color="#6d4d9a" stop-opacity="0.34"/><stop offset="1" stop-color="#6d4d9a" stop-opacity="0"/></radialGradient>
+    <linearGradient id="robe" x1="74" y1="48" x2="138" y2="178" gradientUnits="userSpaceOnUse"><stop stop-color="#8a69bd"/><stop offset="0.52" stop-color="#3c2b57"/><stop offset="1" stop-color="#17101f"/></linearGradient>
+    <linearGradient id="paper" x1="45" y1="69" x2="172" y2="148" gradientUnits="userSpaceOnUse"><stop stop-color="#fff8df"/><stop offset="1" stop-color="#b99a66"/></linearGradient>
+    <linearGradient id="skin" x1="86" y1="54" x2="124" y2="104" gradientUnits="userSpaceOnUse"><stop stop-color="#e8c8b5"/><stop offset="1" stop-color="#9b7060"/></linearGradient>
+  </defs>
+  <ellipse cx="110" cy="190" rx="62" ry="13" fill="#10091a" opacity="0.28"/>
+  <circle cx="110" cy="103" r="82" fill="url(#pageGlow)" opacity="0.9"/>
+  <path d="M45 75L82 62L86 103L49 116L45 75ZM139 60L177 76L171 117L135 101L139 60ZM43 133L79 122L84 159L48 171L43 133Z" fill="url(#paper)" stroke="#5a3b28" stroke-width="4" stroke-linejoin="round" opacity="0.92"/>
+  <path d="M55 83H74M54 94H76M149 76H166M147 88H164M53 143H73M54 153H75" stroke="#6d4d9a" stroke-width="2.5" stroke-linecap="round" opacity="0.78"/>
+  <g filter="url(#shadow)">
+    <path d="M76 91C91 72 127 73 142 96L156 158H63L76 91Z" fill="url(#robe)" stroke="#d9c3ff" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M87 109L75 178H56L64 119L87 109Z" fill="#18101f" stroke="#0a0710" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M111 113L145 162L128 179L96 134L111 113Z" fill="#18101f" stroke="#0a0710" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M58 176H82L76 193H48C50 185 53 180 58 176Z" fill="#0a0710"/>
+    <path d="M126 176L147 158L158 174L134 194C129 190 126 184 126 176Z" fill="#0a0710"/>
+    <path d="M80 64C79 43 96 31 115 34C133 38 141 56 136 75C123 88 94 86 80 64Z" fill="#302240" stroke="#0a0710" stroke-width="5"/>
+    <path d="M87 69C99 81 121 81 133 72L128 100C115 110 94 107 85 91L87 69Z" fill="url(#skin)" stroke="#0d0a12" stroke-width="4"/>
+    <path d="M76 59C95 45 123 44 142 55L136 75C117 81 96 79 76 69V59Z" fill="#21172e" stroke="#0a0710" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M84 58C99 64 122 64 140 55" stroke="#d9c3ff" stroke-width="4" stroke-linecap="round"/>
+    <path d="M95 84H130" stroke="#0a0710" stroke-width="10" stroke-linecap="round"/>
+    <path d="M87 109L61 133L75 150L104 116L87 109Z" fill="#241832" stroke="#d9c3ff" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M129 109L158 133L145 151L112 116L129 109Z" fill="#241832" stroke="#d9c3ff" stroke-width="4" stroke-linejoin="round"/>
+    <rect x="87" y="112" width="47" height="38" rx="5" fill="url(#paper)" stroke="#5a3b28" stroke-width="4"/>
+    <path d="M96 123H125M96 133H124M96 143H114" stroke="#6d4d9a" stroke-width="3" stroke-linecap="round"/>
+    <path d="M80 101C98 112 122 112 140 101" stroke="#f2eaff" stroke-width="4" stroke-linecap="round"/>
+  </g>
+</svg>

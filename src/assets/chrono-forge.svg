@@ -1,0 +1,30 @@
+<svg width="220" height="220" viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="shadow" x="-30%" y="-20%" width="160%" height="160%" color-interpolation-filters="sRGB"><feDropShadow dx="0" dy="8" stdDeviation="5" flood-color="#0b0805" flood-opacity="0.3"/></filter>
+    <radialGradient id="fireGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(128 117) rotate(90) scale(84)"><stop stop-color="#fff2cf"/><stop offset="0.32" stop-color="#ffb85f"/><stop offset="0.72" stop-color="#c24b2c" stop-opacity="0.36"/><stop offset="1" stop-color="#c24b2c" stop-opacity="0"/></radialGradient>
+    <linearGradient id="workwear" x1="70" y1="50" x2="138" y2="178" gradientUnits="userSpaceOnUse"><stop stop-color="#48515d"/><stop offset="0.55" stop-color="#252b33"/><stop offset="1" stop-color="#11151a"/></linearGradient>
+    <linearGradient id="hotMetal" x1="52" y1="78" x2="172" y2="164" gradientUnits="userSpaceOnUse"><stop stop-color="#fff0bc"/><stop offset="0.42" stop-color="#ffb85f"/><stop offset="1" stop-color="#68331f"/></linearGradient>
+    <linearGradient id="skin" x1="86" y1="54" x2="124" y2="104" gradientUnits="userSpaceOnUse"><stop stop-color="#ecc8aa"/><stop offset="1" stop-color="#a9735e"/></linearGradient>
+  </defs>
+  <ellipse cx="110" cy="190" rx="62" ry="13" fill="#0b0805" opacity="0.28"/>
+  <circle cx="128" cy="116" r="78" fill="url(#fireGlow)" opacity="0.9"/>
+  <path d="M152 60C172 85 177 136 153 165M67 91C48 111 47 143 66 164" stroke="#ffd39a" stroke-width="4" stroke-linecap="round" opacity="0.72"/>
+  <g filter="url(#shadow)">
+    <path d="M77 91C91 74 127 73 141 94L154 158H64L77 91Z" fill="url(#workwear)" stroke="#ffb85f" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M88 109L75 178H56L64 119L88 109Z" fill="#14191f" stroke="#090b0d" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M111 113L145 162L128 179L96 134L111 113Z" fill="#14191f" stroke="#090b0d" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M58 176H82L76 193H48C50 185 53 180 58 176Z" fill="#090b0d"/>
+    <path d="M126 176L147 158L158 174L134 194C129 190 126 184 126 176Z" fill="#090b0d"/>
+    <path d="M80 64C79 43 96 31 115 34C133 38 141 56 136 75C123 88 94 86 80 64Z" fill="#272e36" stroke="#090b0d" stroke-width="5"/>
+    <path d="M87 69C99 81 121 81 133 72L128 100C115 110 94 107 85 91L87 69Z" fill="url(#skin)" stroke="#0c0d10" stroke-width="4"/>
+    <path d="M76 59C95 45 123 44 142 55L136 75C117 81 96 79 76 69V59Z" fill="#1b2229" stroke="#090b0d" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M84 58C99 64 122 64 140 55" stroke="#ffb85f" stroke-width="4" stroke-linecap="round"/>
+    <path d="M95 84H130" stroke="#090b0d" stroke-width="10" stroke-linecap="round"/>
+    <path d="M139 111H176L168 166H125L139 111Z" fill="#252b32" stroke="url(#hotMetal)" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M140 131H168M134 149H166" stroke="#fff0bc" stroke-width="4" stroke-linecap="round" opacity="0.82"/>
+    <path d="M74 103L50 75L62 63L91 94L74 103Z" fill="#252b32" stroke="#ffb85f" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M49 54H83V73H49V54Z" fill="url(#hotMetal)" stroke="#3b2116" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M53 64H80" stroke="#fff0bc" stroke-width="3" stroke-linecap="round"/>
+    <path d="M80 101C98 113 122 113 140 101" stroke="#ffd39a" stroke-width="4" stroke-linecap="round"/>
+  </g>
+</svg>
