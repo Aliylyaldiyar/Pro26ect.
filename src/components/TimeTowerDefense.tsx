@@ -75,6 +75,7 @@ type GameScreen =
   | 'tutorial'
   | 'start'
   | 'levels'
+  | 'epochLevels'
   | 'difficulty'
   | 'loadout'
   | 'achievements'
@@ -111,6 +112,14 @@ type LevelMapItem = {
   chapter: string;
   startWave: number;
   description: string;
+};
+
+type EraMission = {
+  id: number;
+  title: Record<LanguageCode, string>;
+  description: Record<LanguageCode, string>;
+  mapHint: Record<LanguageCode, string>;
+  startWaveOffset: number;
 };
 
 type LevelMapPoint = {
@@ -258,6 +267,8 @@ type RetentionProfile = {
   monthly_kills: number;
   monthly_waves: number;
   monthly_completed: boolean;
+  completed_level_ids: number[];
+  achievement_stats: AchievementStats;
 };
 
 type RetentionLeaderboardEntry = {
@@ -375,6 +386,74 @@ const battleMaps: BattleMapLayout[] = [
   },
 ];
 
+type BoardTransform = 'identity' | 'mirrorX' | 'mirrorY' | 'rotate180' | 'transpose';
+
+const missionMapTransforms: BoardTransform[] = ['identity', 'mirrorX', 'mirrorY', 'rotate180', 'transpose'];
+
+function transformBoardCell(cell: number, transform: BoardTransform) {
+  const x = cell % boardSize;
+  const y = Math.floor(cell / boardSize);
+
+  if (transform === 'mirrorX') return y * boardSize + (boardSize - 1 - x);
+  if (transform === 'mirrorY') return (boardSize - 1 - y) * boardSize + x;
+  if (transform === 'rotate180') return (boardSize - 1 - y) * boardSize + (boardSize - 1 - x);
+  if (transform === 'transpose') return x * boardSize + y;
+
+  return cell;
+}
+
+function transformBattleDecoration(decoration: BattleDecoration, transform: BoardTransform): BattleDecoration {
+  const spanX = decoration.spanX ?? 1;
+  const spanY = decoration.spanY ?? 1;
+
+  if (transform === 'mirrorX') {
+    return { ...decoration, x: boardSize - decoration.x - spanX + 2 };
+  }
+
+  if (transform === 'mirrorY') {
+    return { ...decoration, y: boardSize - decoration.y - spanY + 2 };
+  }
+
+  if (transform === 'rotate180') {
+    return {
+      ...decoration,
+      x: boardSize - decoration.x - spanX + 2,
+      y: boardSize - decoration.y - spanY + 2,
+    };
+  }
+
+  if (transform === 'transpose') {
+    return {
+      ...decoration,
+      x: decoration.y,
+      y: decoration.x,
+      spanX: spanY,
+      spanY: spanX,
+    };
+  }
+
+  return decoration;
+}
+
+function transformCellList(cells: number[], transform: BoardTransform) {
+  return [...new Set(cells.map((cell) => transformBoardCell(cell, transform)))];
+}
+
+function getMissionBattleMap(level: LevelMapItem, mission: EraMission, language: LanguageCode): BattleMapLayout {
+  const baseMap = battleMaps.find((battleMap) => battleMap.id === level.id) ?? battleMaps[0];
+  const transform = missionMapTransforms[mission.id - 1] ?? 'identity';
+
+  return {
+    id: level.id * 10 + mission.id,
+    name: mission.title[language],
+    description: mission.description[language],
+    pathCells: transformCellList(baseMap.pathCells, transform),
+    buildCells: transformCellList(baseMap.buildCells, transform),
+    highlandCells: transformCellList(baseMap.highlandCells, transform),
+    decorations: baseMap.decorations.map((decoration) => transformBattleDecoration(decoration, transform)),
+  };
+}
+
 const levelMap: LevelMapItem[] = [
   { id: 1, title: 'Искра времени', mapTitle: 'Каменный век', mapArea: 'stone', chapter: 'Обучение', startWave: 1, description: 'Первые башни и спокойные враги.' },
   { id: 2, title: 'Каменная тропа', mapTitle: 'Античность', mapArea: 'ancient', chapter: 'Обучение', startWave: 4, description: 'Дорога становится длиннее и опаснее.' },
@@ -383,6 +462,51 @@ const levelMap: LevelMapItem[] = [
   { id: 5, title: 'Разлом секунд', mapTitle: 'Будущее', mapArea: 'future', chapter: 'Сложные уровни', startWave: 18, description: 'Волны становятся плотнее и давят сильнее.' },
   { id: 6, title: 'Финальный портал', mapTitle: 'Киберпанк', mapArea: 'cyber', chapter: 'Сложные уровни', startWave: 26, description: 'Проверка всей защиты линии времени.' },
 ];
+
+const eraMissionCatalog: Record<LevelMapItem['mapArea'], EraMission[]> = {
+  stone: [
+    { id: 1, title: { ru: 'Охотничья тропа', en: 'Hunter Trail', kk: 'Аңшы жолы' }, description: { ru: 'Одна спокойная дорога для первых башен.', en: 'One calm road for the first towers.', kk: 'Алғашқы мұнараларға арналған тыныш жол.' }, mapHint: { ru: 'Извилистая тропа', en: 'Curved trail', kk: 'Ирек жол' }, startWaveOffset: 0 },
+    { id: 2, title: { ru: 'Мамонтовый круг', en: 'Mammoth Circle', kk: 'Мамонт шеңбері' }, description: { ru: 'Дорога делает петлю вокруг центра.', en: 'The road loops around the center.', kk: 'Жол орталықты айналып өтеді.' }, mapHint: { ru: 'Круговая охота', en: 'Circular hunt', kk: 'Шеңберлі аңшылық' }, startWaveOffset: 2 },
+    { id: 3, title: { ru: 'Ледяной овраг', en: 'Frozen Ravine', kk: 'Мұзды сай' }, description: { ru: 'Узкие проходы заставляют ставить башни точнее.', en: 'Narrow paths require cleaner tower placement.', kk: 'Тар өткелдер мұнараны дәл қоюды талап етеді.' }, mapHint: { ru: 'Два узких прохода', en: 'Two narrow lanes', kk: 'Екі тар жол' }, startWaveOffset: 4 },
+    { id: 4, title: { ru: 'Пещерный проход', en: 'Cave Passage', kk: 'Үңгір өткелі' }, description: { ru: 'Короткая карта с быстрым давлением.', en: 'A short map with fast pressure.', kk: 'Қысқа карта, қысым тез өседі.' }, mapHint: { ru: 'Короткий маршрут', en: 'Short route', kk: 'Қысқа бағыт' }, startWaveOffset: 6 },
+    { id: 5, title: { ru: 'Стоянка шамана', en: 'Shaman Camp', kk: 'Бақсы тұрағы' }, description: { ru: 'Финальный разлом эпохи с плотными волнами.', en: 'The era rift closes with dense waves.', kk: 'Дәуір жарылысы тығыз толқынмен жабылады.' }, mapHint: { ru: 'Разлом в центре', en: 'Central rift', kk: 'Орталық жарық' }, startWaveOffset: 8 },
+  ],
+  ancient: [
+    { id: 1, title: { ru: 'Дорога колонн', en: 'Column Road', kk: 'Бағандар жолы' }, description: { ru: 'Прямая дорога и понятные позиции.', en: 'A straight road with clear positions.', kk: 'Түзу жол және түсінікті орындар.' }, mapHint: { ru: 'Прямая линия', en: 'Straight line', kk: 'Түзу сызық' }, startWaveOffset: 0 },
+    { id: 2, title: { ru: 'Амфитеатр', en: 'Amphitheater', kk: 'Амфитеатр' }, description: { ru: 'Враги идут по широкой дуге.', en: 'Enemies travel along a wide arc.', kk: 'Жаулар кең доғамен жүреді.' }, mapHint: { ru: 'Дуга вокруг центра', en: 'Arc around center', kk: 'Орталық доғасы' }, startWaveOffset: 2 },
+    { id: 3, title: { ru: 'Акведук', en: 'Aqueduct', kk: 'Акведук' }, description: { ru: 'Две линии рядом с сильным центром.', en: 'Two lanes near a powerful center.', kk: 'Күшті орталық жанында екі жол.' }, mapHint: { ru: 'Параллельные дороги', en: 'Parallel roads', kk: 'Қатар жолдар' }, startWaveOffset: 4 },
+    { id: 4, title: { ru: 'Храм времени', en: 'Time Temple', kk: 'Уақыт храмы' }, description: { ru: 'Много платформ, но не все удобные.', en: 'Many platforms, not all of them comfortable.', kk: 'Платформа көп, бірақ бәрі ыңғайлы емес.' }, mapHint: { ru: 'Редкие сильные точки', en: 'Rare strong points', kk: 'Сирек күшті орындар' }, startWaveOffset: 6 },
+    { id: 5, title: { ru: 'Площадь императора', en: 'Emperor Square', kk: 'Император алаңы' }, description: { ru: 'Широкая дорога и сильный босс эпохи.', en: 'A wide road and a strong era boss.', kk: 'Кең жол және күшті дәуір боссы.' }, mapHint: { ru: 'Широкий маршрут', en: 'Wide route', kk: 'Кең бағыт' }, startWaveOffset: 8 },
+  ],
+  medieval: [
+    { id: 1, title: { ru: 'Замковые ворота', en: 'Castle Gate', kk: 'Қамал қақпасы' }, description: { ru: 'Оборона одного моста к базе.', en: 'Defend one bridge to the base.', kk: 'Базаға апаратын бір көпірді қорға.' }, mapHint: { ru: 'Мост к базе', en: 'Bridge to base', kk: 'База көпірі' }, startWaveOffset: 0 },
+    { id: 2, title: { ru: 'Ров и башни', en: 'Moat Towers', kk: 'Ор мен мұнаралар' }, description: { ru: 'S-маршрут помогает замедляющим башням.', en: 'An S-route rewards slowing towers.', kk: 'S-жол баяулатқыш мұнараларға пайдалы.' }, mapHint: { ru: 'S-образная дорога', en: 'S-shaped road', kk: 'S тәрізді жол' }, startWaveOffset: 2 },
+    { id: 3, title: { ru: 'Лесная засада', en: 'Forest Ambush', kk: 'Орман тосқауылы' }, description: { ru: 'Повороты дают шанс правильно расставиться.', en: 'Turns give room for smart placement.', kk: 'Бұрылыстар дұрыс қоюға мүмкіндік береді.' }, mapHint: { ru: 'Много поворотов', en: 'Many turns', kk: 'Көп бұрылыс' }, startWaveOffset: 4 },
+    { id: 4, title: { ru: 'Осада крепости', en: 'Fortress Siege', kk: 'Қамал қоршауы' }, description: { ru: 'Давление приходит с двух сторон.', en: 'Pressure comes from two sides.', kk: 'Қысым екі жақтан келеді.' }, mapHint: { ru: 'Два входа', en: 'Two entrances', kk: 'Екі кіріс' }, startWaveOffset: 6 },
+    { id: 5, title: { ru: 'Тронный двор', en: 'Throne Yard', kk: 'Тақ ауласы' }, description: { ru: 'Плотные группы проверяют урон по площади.', en: 'Dense groups test area damage.', kk: 'Тығыз топтар аймақтық зиянды тексереді.' }, mapHint: { ru: 'Плотные волны', en: 'Dense waves', kk: 'Тығыз толқындар' }, startWaveOffset: 8 },
+  ],
+  industrial: [
+    { id: 1, title: { ru: 'Паровой завод', en: 'Steam Factory', kk: 'Бу зауыты' }, description: { ru: 'Длинный маршрут даёт время на разгон.', en: 'A long route gives time to scale.', kk: 'Ұзын бағыт дайындалуға уақыт береді.' }, mapHint: { ru: 'Длинная дорога', en: 'Long road', kk: 'Ұзын жол' }, startWaveOffset: 0 },
+    { id: 2, title: { ru: 'Железная станция', en: 'Iron Station', kk: 'Темір станция' }, description: { ru: 'Две дороги пересекаются возле центра.', en: 'Two roads cross near the center.', kk: 'Екі жол орталықта қиылысады.' }, mapHint: { ru: 'Пересечение', en: 'Crossing', kk: 'Қиылыс' }, startWaveOffset: 2 },
+    { id: 3, title: { ru: 'Дымный квартал', en: 'Smoke District', kk: 'Түтін ауданы' }, description: { ru: 'Платформы стоят островками.', en: 'Platforms are placed as islands.', kk: 'Платформалар арал сияқты орналасқан.' }, mapHint: { ru: 'Островки платформ', en: 'Platform islands', kk: 'Платформа аралдары' }, startWaveOffset: 4 },
+    { id: 4, title: { ru: 'Конвейер времени', en: 'Time Conveyor', kk: 'Уақыт конвейері' }, description: { ru: 'Короткие волны идут быстрее обычного.', en: 'Short waves move faster than usual.', kk: 'Қысқа толқындар тезірек жүреді.' }, mapHint: { ru: 'Быстрый темп', en: 'Fast tempo', kk: 'Жылдам қарқын' }, startWaveOffset: 6 },
+    { id: 5, title: { ru: 'Механическое сердце', en: 'Mechanical Heart', kk: 'Механикалық жүрек' }, description: { ru: 'Финальная проверка экономики и урона.', en: 'A final test of economy and damage.', kk: 'Экономика мен зиянның соңғы сынағы.' }, mapHint: { ru: 'Сильный темп', en: 'High pressure', kk: 'Күшті қысым' }, startWaveOffset: 8 },
+  ],
+  future: [
+    { id: 1, title: { ru: 'Орбитальный мост', en: 'Orbital Bridge', kk: 'Орбиталық көпір' }, description: { ru: 'Дорога идёт по краям поля.', en: 'The road runs along the edges.', kk: 'Жол алаң шетімен өтеді.' }, mapHint: { ru: 'Краевой маршрут', en: 'Edge route', kk: 'Шеткі бағыт' }, startWaveOffset: 0 },
+    { id: 2, title: { ru: 'Неоновый купол', en: 'Neon Dome', kk: 'Неон күмбезі' }, description: { ru: 'Центральные платформы решают бой.', en: 'Central platforms decide the fight.', kk: 'Орталық платформалар шайқасты шешеді.' }, mapHint: { ru: 'Центральная зона', en: 'Central zone', kk: 'Орталық аймақ' }, startWaveOffset: 2 },
+    { id: 3, title: { ru: 'Лаборатория скачков', en: 'Jump Lab', kk: 'Секіру зертханасы' }, description: { ru: 'Два входа требуют гибкой защиты.', en: 'Two entrances demand flexible defense.', kk: 'Екі кіріс икемді қорғаныс сұрайды.' }, mapHint: { ru: 'Два входа', en: 'Two entrances', kk: 'Екі кіріс' }, startWaveOffset: 4 },
+    { id: 4, title: { ru: 'Квантовый тоннель', en: 'Quantum Tunnel', kk: 'Квант туннелі' }, description: { ru: 'Короткий опасный участок нельзя пропустить.', en: 'A short danger section cannot be ignored.', kk: 'Қысқа қауіпті бөлікті өткізуге болмайды.' }, mapHint: { ru: 'Короткий тоннель', en: 'Short tunnel', kk: 'Қысқа туннель' }, startWaveOffset: 6 },
+    { id: 5, title: { ru: 'Ядро сингулярности', en: 'Singularity Core', kk: 'Сингулярлық ядро' }, description: { ru: 'Быстрые враги проверяют реакцию.', en: 'Fast enemies test reaction.', kk: 'Жылдам жаулар реакцияны тексереді.' }, mapHint: { ru: 'Быстрые враги', en: 'Fast enemies', kk: 'Жылдам жаулар' }, startWaveOffset: 8 },
+  ],
+  cyber: [
+    { id: 1, title: { ru: 'Улица голограмм', en: 'Hologram Street', kk: 'Голограмма көшесі' }, description: { ru: 'Городская дорога с множеством поворотов.', en: 'A city road with many turns.', kk: 'Көп бұрылысты қала жолы.' }, mapHint: { ru: 'Городской зигзаг', en: 'City zigzag', kk: 'Қала ирегі' }, startWaveOffset: 0 },
+    { id: 2, title: { ru: 'Серверный район', en: 'Server District', kk: 'Сервер ауданы' }, description: { ru: 'Много маленьких, но спорных позиций.', en: 'Many small but tricky positions.', kk: 'Көп шағын, бірақ күрделі орындар.' }, mapHint: { ru: 'Малые платформы', en: 'Small platforms', kk: 'Шағын платформалар' }, startWaveOffset: 2 },
+    { id: 3, title: { ru: 'Дата-мост', en: 'Data Bridge', kk: 'Дата көпірі' }, description: { ru: 'Симметричные дороги нужно держать вместе.', en: 'Symmetric roads must be held together.', kk: 'Симметриялық жолдарды бірге ұстау керек.' }, mapHint: { ru: 'Симметрия', en: 'Symmetry', kk: 'Симметрия' }, startWaveOffset: 4 },
+    { id: 4, title: { ru: 'Черный рынок времени', en: 'Time Black Market', kk: 'Уақыт қара базары' }, description: { ru: 'Скорость волн постоянно меняется.', en: 'Wave speed keeps changing.', kk: 'Толқын жылдамдығы өзгеріп тұрады.' }, mapHint: { ru: 'Разный темп', en: 'Mixed tempo', kk: 'Әр түрлі қарқын' }, startWaveOffset: 6 },
+    { id: 5, title: { ru: 'Финальный портал', en: 'Final Portal', kk: 'Соңғы портал' }, description: { ru: 'Максимальная проверка всей защиты.', en: 'The maximum test of the whole defense.', kk: 'Бүкіл қорғаныстың ең үлкен сынағы.' }, mapHint: { ru: 'Несколько входов', en: 'Several entrances', kk: 'Бірнеше кіріс' }, startWaveOffset: 8 },
+  ],
+};
 
 const levelMapSize = 30;
 const levelMapPositions: Record<number, LevelMapPoint> = {
@@ -442,6 +566,568 @@ const movementThreshold = 8;
 const bossEnemyKindId: EasyMonsterId = 'tickingScarab';
 const baseLevelXp = 120;
 
+const languageOptions: Array<{ code: LanguageCode; label: string }> = [
+  { code: 'ru', label: 'RU' },
+  { code: 'en', label: 'EN' },
+  { code: 'kk', label: 'KZ' },
+];
+
+const uiText = {
+  ru: {
+    player: 'Игрок',
+    guest: 'Гость',
+    startTitle: 'Начальный экран',
+    startSubtitle: 'Выбери старт, чтобы перейти к карте уровней. Настройки камеры уже доступны в бою: мышь крутит карту, колесико меняет масштаб.',
+    start: 'Начать',
+    achievements: 'Достижения',
+    settings: 'Настройки',
+    tutorial: 'Туториал',
+    editName: 'Изменить имя',
+    playerName: 'Имя игрока',
+    save: 'Сохранить',
+    cancel: 'Отмена',
+    settingsSubtitle: 'Здесь можно поменять язык, вернуть камеру к стандартному виду или открыть обучение.',
+    language: 'Язык',
+    cameraZoom: 'масштаб камеры',
+    resetCamera: 'Сбросить камеру',
+    cameraReset: 'Камера возвращена к стандартному виду.',
+    back: 'Назад',
+    levelMap: 'Карта уровней',
+    levelMapSubtitle: 'Игрок проходит уровни по порядку, но сейчас можно выбрать любой уровень для теста.',
+    opened: 'Открыто',
+    notCompleted: 'Не пройдено',
+    legend: 'Легенда',
+    enemyRoad: 'Дорога врагов',
+    towerPlatform: 'Платформа для башни',
+    timeDistortion: 'Искажение времени',
+    timeRift: 'Разлом времени',
+    playerBase: 'База игрока',
+    difficulty: 'Выбор сложности',
+    difficultySubtitle: '{level}: старт с волны {wave}. После выбора сложности откроется карта битвы.',
+    coins: 'монет',
+    baseHp: 'HP базы',
+    backToLevels: 'Назад к уровням',
+    loadout: 'Собери Бестиарий',
+    loadoutSubtitle: 'Выбери минимум {count} башни для уровня {level}. После этого откроется поле битвы.',
+    bestiary: 'Бестиарий',
+    selected: 'выбрано',
+    battleSet: 'Набор на бой',
+    ready: 'готов',
+    towersNeeded: 'нужны башни',
+    empty: 'Пусто',
+    addFromBestiary: 'Добавь из Бестиария',
+    backToDifficulty: 'Назад к сложности',
+    toBattle: 'В бой',
+    defenderProgress: 'Прогресс защитника',
+    savedOnline: 'сохраняется в Supabase',
+    signInToSave: 'войдите, чтобы сохранять онлайн',
+    dayStreakShort: 'дн. серия',
+    level: 'Уровень',
+    bestWave: 'Лучшая волна',
+    wins: 'побед',
+    streak: 'Серия',
+    daysInRow: 'дней подряд',
+    xpToNext: 'До уровня {level}: {xp} XP',
+    daily: 'Ежедневное',
+    weekly: 'Еженедельное',
+    month: 'Месяц',
+    reward: 'Награда',
+    done: 'готово',
+    leaders: 'Лидеры',
+    dailyKillsTitle: 'Охота дня',
+    dailyKillsDescription: 'Победи {count} мобов сегодня.',
+    dailyWavesTitle: 'Три удара времени',
+    dailyWavesDescription: 'Отбей {count} волн сегодня.',
+    weeklyWavesTitle: 'Недельный гарнизон',
+    weeklyWavesDescription: 'Отбей {count} волны за неделю.',
+    weeklyKillsTitle: 'Операция разлом',
+    weeklyKillsDescription: 'Победи {count} мобов за неделю.',
+    monthlyTitle: 'Супер-пупер марафон времени',
+    monthlyDescription: 'За месяц победи {count} мобов и докажи, что портал под контролем.',
+    profileTitle: 'Перед началом',
+    profileSubtitle: 'Введи имя и возраст игрока, чтобы начать защиту линии времени.',
+    name: 'Имя',
+    namePlaceholder: 'Например, Алишер',
+    age: 'Возраст',
+    tutorialTitle: 'Практическое обучение',
+    tutorialSubtitle: 'Сейчас мы сразу перейдем на карту битвы: комментатор покажет, какую башню выбрать, куда ее поставить и когда запускать волну.',
+    tutorialStepOneTitle: 'Выбери уровень',
+    tutorialStepOneText: 'На карте непройденные территории бледные. После победы они получают цвет эпохи.',
+    tutorialStepTwoTitle: 'Собери башни',
+    tutorialStepTwoText: 'Перед боем выбери минимум {count} башни.',
+    tutorialStepThreeTitle: 'Ставь не на дороге',
+    tutorialStepThreeText: 'Башни ставятся только на специальные клетки. Дорога нужна врагам для движения.',
+    tutorialStepFourTitle: 'Улучшай защиту',
+    tutorialStepFourText: 'Выбирай башню на поле, улучшай ее и меняй приоритет цели.',
+    startPractice: 'Начать практику',
+    skip: 'Пропустить',
+    achievementsTitle: 'Достижения',
+    achievementsSubtitle: 'Выполняй цели во время защиты портала. Прогресс сохраняется на этом компьютере.',
+    earned: 'получено',
+    inProgress: 'в процессе',
+    progress: 'Прогресс',
+    battleTutorial: 'Обучение в бою',
+    tutorialSelectTower: 'Шаг 1: выбери башню слева.',
+    tutorialPlaceTower: 'Шаг 2: поставь башню на подсвеченную платформу.',
+    tutorialStartWave: 'Шаг 3: запусти первую волну.',
+    tutorialWatchWave: 'Шаг 4: наблюдай за дорогой, радиусом и наградами.',
+    tutorialComplete: 'Готово: теперь можно играть самостоятельно.',
+    finish: 'Завершить',
+    wave: 'Волна',
+    seconds: 'сек',
+    defeat: 'Поражение',
+    defeatSubtitle: 'Линия времени не выдержала натиск.',
+    gameTime: 'Время игры',
+    restart: 'Заново',
+    mainMenu: 'В главное меню',
+    victory: 'Победа',
+    victoryMessage: 'Все 40 волн пройдены. Портал времени стабилен.',
+    bossWaveHint: 'Следующая волна с боссом.',
+    waveSkip: 'Скип',
+    launch: 'Запустить',
+    baseHpEnded: 'HP базы закончилось. Попробуй другую расстановку.',
+    retry: 'Попробовать еще раз',
+  },
+  en: {
+    player: 'Player',
+    guest: 'Guest',
+    startTitle: 'Main Menu',
+    startSubtitle: 'Choose start to open the level map. Camera controls are available in battle: drag to rotate, mouse wheel to zoom.',
+    start: 'Start',
+    achievements: 'Achievements',
+    settings: 'Settings',
+    tutorial: 'Tutorial',
+    editName: 'Edit name',
+    playerName: 'Player name',
+    save: 'Save',
+    cancel: 'Cancel',
+    settingsSubtitle: 'Here you can change language, reset the camera, or open the tutorial.',
+    language: 'Language',
+    cameraZoom: 'camera zoom',
+    resetCamera: 'Reset camera',
+    cameraReset: 'Camera returned to the default view.',
+    back: 'Back',
+    levelMap: 'Level Map',
+    levelMapSubtitle: 'The player clears levels in order, but any level can be selected for testing right now.',
+    opened: 'Open',
+    notCompleted: 'Not completed',
+    legend: 'Legend',
+    enemyRoad: 'Enemy road',
+    towerPlatform: 'Tower platform',
+    timeDistortion: 'Time distortion',
+    timeRift: 'Time rift',
+    playerBase: 'Player base',
+    difficulty: 'Choose Difficulty',
+    difficultySubtitle: '{level}: starts from wave {wave}. After choosing difficulty, the battle map opens.',
+    coins: 'coins',
+    baseHp: 'base HP',
+    backToLevels: 'Back to levels',
+    loadout: 'Build Bestiary',
+    loadoutSubtitle: 'Choose at least {count} towers for {level}. Then the battlefield will open.',
+    bestiary: 'Bestiary',
+    selected: 'selected',
+    battleSet: 'Battle loadout',
+    ready: 'ready',
+    towersNeeded: 'need towers',
+    empty: 'Empty',
+    addFromBestiary: 'Add from Bestiary',
+    backToDifficulty: 'Back to difficulty',
+    toBattle: 'To battle',
+    defenderProgress: 'Defender progress',
+    savedOnline: 'saved in Supabase',
+    signInToSave: 'sign in to save online',
+    dayStreakShort: 'day streak',
+    level: 'Level',
+    bestWave: 'Best wave',
+    wins: 'wins',
+    streak: 'Streak',
+    daysInRow: 'days in a row',
+    xpToNext: 'To level {level}: {xp} XP',
+    daily: 'Daily',
+    weekly: 'Weekly',
+    month: 'Month',
+    reward: 'Reward',
+    done: 'done',
+    leaders: 'Leaders',
+    dailyKillsTitle: 'Daily Hunt',
+    dailyKillsDescription: 'Defeat {count} mobs today.',
+    dailyWavesTitle: 'Three Time Strikes',
+    dailyWavesDescription: 'Clear {count} waves today.',
+    weeklyWavesTitle: 'Weekly Garrison',
+    weeklyWavesDescription: 'Clear {count} waves this week.',
+    weeklyKillsTitle: 'Rift Operation',
+    weeklyKillsDescription: 'Defeat {count} mobs this week.',
+    monthlyTitle: 'Mega Time Marathon',
+    monthlyDescription: 'Defeat {count} mobs this month and prove the portal is under control.',
+    profileTitle: 'Before Start',
+    profileSubtitle: 'Enter the player name and age to start defending the timeline.',
+    name: 'Name',
+    namePlaceholder: 'For example, Alisher',
+    age: 'Age',
+    tutorialTitle: 'Practice Tutorial',
+    tutorialSubtitle: 'We will jump straight to the battle map: the guide will show which tower to choose, where to place it, and when to start the wave.',
+    tutorialStepOneTitle: 'Choose a level',
+    tutorialStepOneText: 'Unfinished territories are faded on the map. After a win, they gain the era color.',
+    tutorialStepTwoTitle: 'Build a loadout',
+    tutorialStepTwoText: 'Before battle, choose at least {count} towers.',
+    tutorialStepThreeTitle: 'Do not build on the road',
+    tutorialStepThreeText: 'Towers can be placed only on special tiles. Enemies need the road to move.',
+    tutorialStepFourTitle: 'Upgrade defense',
+    tutorialStepFourText: 'Select a tower on the field, upgrade it, and change target priority.',
+    startPractice: 'Start practice',
+    skip: 'Skip',
+    achievementsTitle: 'Achievements',
+    achievementsSubtitle: 'Complete goals while defending the portal. Progress is saved on this computer.',
+    earned: 'earned',
+    inProgress: 'in progress',
+    progress: 'Progress',
+    battleTutorial: 'Battle tutorial',
+    tutorialSelectTower: 'Step 1: choose a tower on the left.',
+    tutorialPlaceTower: 'Step 2: place it on the highlighted platform.',
+    tutorialStartWave: 'Step 3: start the first wave.',
+    tutorialWatchWave: 'Step 4: watch the road, range, and rewards.',
+    tutorialComplete: 'Done: now you can play on your own.',
+    finish: 'Finish',
+    wave: 'Wave',
+    seconds: 'sec',
+    defeat: 'Defeat',
+    defeatSubtitle: 'The timeline could not withstand the attack.',
+    gameTime: 'Game time',
+    restart: 'Restart',
+    mainMenu: 'Main menu',
+    victory: 'Victory',
+    victoryMessage: 'All 40 waves are complete. The time portal is stable.',
+    bossWaveHint: 'The next wave has a boss.',
+    waveSkip: 'Skip',
+    launch: 'Launch',
+    baseHpEnded: 'Base HP is gone. Try a different layout.',
+    retry: 'Try again',
+  },
+  kk: {
+    player: 'Ойыншы',
+    guest: 'Қонақ',
+    startTitle: 'Басты мәзір',
+    startSubtitle: 'Деңгей картасына өту үшін стартты таңда. Камера шайқаста қолжетімді: тышқан картаны бұрады, дөңгелек масштабты өзгертеді.',
+    start: 'Бастау',
+    achievements: 'Жетістіктер',
+    settings: 'Баптаулар',
+    tutorial: 'Туториал',
+    editName: 'Атын өзгерту',
+    playerName: 'Ойыншы аты',
+    save: 'Сақтау',
+    cancel: 'Бас тарту',
+    settingsSubtitle: 'Мұнда тілді ауыстыруға, камераны бастапқы көрініске қайтаруға немесе үйретуді ашуға болады.',
+    language: 'Тіл',
+    cameraZoom: 'камера масштабы',
+    resetCamera: 'Камераны қалпына келтіру',
+    cameraReset: 'Камера бастапқы көрініске қайтарылды.',
+    back: 'Артқа',
+    levelMap: 'Деңгей картасы',
+    levelMapSubtitle: 'Ойыншы деңгейлерді ретімен өтеді, бірақ қазір тест үшін кез келген деңгейді таңдауға болады.',
+    opened: 'Ашық',
+    notCompleted: 'Өтілмеген',
+    legend: 'Аңыз',
+    enemyRoad: 'Жаулар жолы',
+    towerPlatform: 'Мұнара платформасы',
+    timeDistortion: 'Уақыт бұрмалануы',
+    timeRift: 'Уақыт жарығы',
+    playerBase: 'Ойыншы базасы',
+    difficulty: 'Қиындық таңдау',
+    difficultySubtitle: '{level}: {wave}-толқыннан басталады. Қиындық таңдалған соң шайқас картасы ашылады.',
+    coins: 'монета',
+    baseHp: 'база HP',
+    backToLevels: 'Деңгейлерге қайту',
+    loadout: 'Бестиарий жина',
+    loadoutSubtitle: '{level} үшін кемінде {count} мұнара таңда. Содан кейін шайқас алаңы ашылады.',
+    bestiary: 'Бестиарий',
+    selected: 'таңдалды',
+    battleSet: 'Шайқас жинағы',
+    ready: 'дайын',
+    towersNeeded: 'мұнара керек',
+    empty: 'Бос',
+    addFromBestiary: 'Бестиарийден қос',
+    backToDifficulty: 'Қиындыққа қайту',
+    toBattle: 'Шайқасқа',
+    defenderProgress: 'Қорғаушы прогресі',
+    savedOnline: 'Supabase ішінде сақталады',
+    signInToSave: 'онлайн сақтау үшін кір',
+    dayStreakShort: 'күн серия',
+    level: 'Деңгей',
+    bestWave: 'Ең жақсы толқын',
+    wins: 'жеңіс',
+    streak: 'Серия',
+    daysInRow: 'күн қатарынан',
+    xpToNext: '{level}-деңгейге дейін: {xp} XP',
+    daily: 'Күнделікті',
+    weekly: 'Апталық',
+    month: 'Ай',
+    reward: 'Сыйлық',
+    done: 'дайын',
+    leaders: 'Көшбасшылар',
+    dailyKillsTitle: 'Күндік аңшылық',
+    dailyKillsDescription: 'Бүгін {count} мобты жең.',
+    dailyWavesTitle: 'Уақыттың үш соққысы',
+    dailyWavesDescription: 'Бүгін {count} толқынды қайтар.',
+    weeklyWavesTitle: 'Апталық гарнизон',
+    weeklyWavesDescription: 'Апта ішінде {count} толқынды қайтар.',
+    weeklyKillsTitle: 'Жарық операциясы',
+    weeklyKillsDescription: 'Апта ішінде {count} мобты жең.',
+    monthlyTitle: 'Үлкен уақыт марафоны',
+    monthlyDescription: 'Ай ішінде {count} мобты жеңіп, портал бақылауда екенін дәлелде.',
+    profileTitle: 'Бастамас бұрын',
+    profileSubtitle: 'Уақыт сызығын қорғауды бастау үшін ойыншының аты мен жасын енгіз.',
+    name: 'Аты',
+    namePlaceholder: 'Мысалы, Әлішер',
+    age: 'Жасы',
+    tutorialTitle: 'Практикалық үйрету',
+    tutorialSubtitle: 'Бірден шайқас картасына өтеміз: көмекші қай мұнараны таңдау, қайда қою және толқынды қашан бастау керегін көрсетеді.',
+    tutorialStepOneTitle: 'Деңгей таңда',
+    tutorialStepOneText: 'Өтілмеген аймақтар картада солғын. Жеңістен кейін олар дәуір түсін алады.',
+    tutorialStepTwoTitle: 'Мұнараларды жина',
+    tutorialStepTwoText: 'Шайқас алдында кемінде {count} мұнара таңда.',
+    tutorialStepThreeTitle: 'Жолға қойма',
+    tutorialStepThreeText: 'Мұнаралар тек арнайы ұяшықтарға қойылады. Жол жаулардың жүруі үшін керек.',
+    tutorialStepFourTitle: 'Қорғанысты жақсарт',
+    tutorialStepFourText: 'Алаңдағы мұнараны таңдап, жақсартып, нысана басымдығын өзгерт.',
+    startPractice: 'Практиканы бастау',
+    skip: 'Өткізу',
+    achievementsTitle: 'Жетістіктер',
+    achievementsSubtitle: 'Порталды қорғау кезінде мақсаттарды орында. Прогресс осы компьютерде сақталады.',
+    earned: 'алынды',
+    inProgress: 'орындалуда',
+    progress: 'Прогресс',
+    battleTutorial: 'Шайқас үйретуі',
+    tutorialSelectTower: '1-қадам: сол жақтан мұнара таңда.',
+    tutorialPlaceTower: '2-қадам: мұнараны белгіленген платформаға қой.',
+    tutorialStartWave: '3-қадам: бірінші толқынды баста.',
+    tutorialWatchWave: '4-қадам: жолды, радиусты және сыйлықтарды бақыла.',
+    tutorialComplete: 'Дайын: енді өзің ойнай аласың.',
+    finish: 'Аяқтау',
+    wave: 'Толқын',
+    seconds: 'сек',
+    defeat: 'Жеңіліс',
+    defeatSubtitle: 'Уақыт сызығы шабуылға шыдамады.',
+    gameTime: 'Ойын уақыты',
+    restart: 'Қайта бастау',
+    mainMenu: 'Басты мәзір',
+    victory: 'Жеңіс',
+    victoryMessage: '40 толқынның бәрі өтті. Уақыт порталы тұрақты.',
+    bossWaveHint: 'Келесі толқында босс бар.',
+    waveSkip: 'Өткізу',
+    launch: 'Бастау',
+    baseHpEnded: 'Базаның HP бітті. Басқа орналастыруды байқап көр.',
+    retry: 'Қайта көру',
+  },
+} satisfies Record<LanguageCode, Record<string, string>>;
+
+const levelText: Record<LanguageCode, Record<number, { title: string; mapTitle: string }>> = {
+  ru: {},
+  en: {
+    1: { title: 'Time Spark', mapTitle: 'Stone Age' },
+    2: { title: 'Stone Path', mapTitle: 'Antiquity' },
+    3: { title: 'Castle Gate', mapTitle: 'Middle Ages' },
+    4: { title: 'Steam District', mapTitle: 'Industrial Era' },
+    5: { title: 'Second Rift', mapTitle: 'Future' },
+    6: { title: 'Final Portal', mapTitle: 'Cyberpunk' },
+  },
+  kk: {
+    1: { title: 'Уақыт ұшқыны', mapTitle: 'Тас дәуірі' },
+    2: { title: 'Тас жол', mapTitle: 'Антика' },
+    3: { title: 'Қамал қақпасы', mapTitle: 'Орта ғасыр' },
+    4: { title: 'Бу ауданы', mapTitle: 'Индустриялық дәуір' },
+    5: { title: 'Секунд жарығы', mapTitle: 'Болашақ' },
+    6: { title: 'Соңғы портал', mapTitle: 'Киберпанк' },
+  },
+};
+
+const difficultyText: Record<LanguageCode, Record<Difficulty['id'], { name: string; description: string; boss: string }>> = {
+  ru: {
+    easy: { name: 'Легкая', description: 'Для новичков: больше монет, больше HP базы и спокойные первые волны.', boss: 'Треснувший Хрономант' },
+    experienced: { name: 'Опытный режим', description: 'Для опытных искателей времени: честный баланс без лишней помощи.', boss: 'Повелитель Эпох' },
+    hard: { name: 'Разрыв', description: 'Враги крепче, ошибок меньше, башни нужно ставить точнее.', boss: 'Разлом Сознания' },
+    antiTime: { name: 'Антивремя', description: 'Самый сложный режим: поток времени злится, врагов больше, портал хрупкий.', boss: 'Нулевой Парадокс' },
+  },
+  en: {
+    easy: { name: 'Easy', description: 'For beginners: more coins, more base HP, and calmer first waves.', boss: 'Cracked Chronomancer' },
+    experienced: { name: 'Experienced', description: 'For practiced time seekers: fair balance without extra help.', boss: 'Epoch Lord' },
+    hard: { name: 'Rift', description: 'Enemies are tougher, mistakes hurt more, and tower placement matters more.', boss: 'Mind Rift' },
+    antiTime: { name: 'Anti-Time', description: 'The hardest mode: time flow is angry, enemies are many, and the portal is fragile.', boss: 'Zero Paradox' },
+  },
+  kk: {
+    easy: { name: 'Жеңіл', description: 'Жаңадан бастаушыларға: көбірек монета, көбірек база HP және тыныш алғашқы толқындар.', boss: 'Жарылған Хрономант' },
+    experienced: { name: 'Тәжірибелі', description: 'Уақыт іздеушілеріне: артық көмексіз әділ баланс.', boss: 'Дәуір Әміршісі' },
+    hard: { name: 'Жарық', description: 'Жаулар мықтырақ, қате аз кешіріледі, мұнараны дәл қою маңызды.', boss: 'Сана Жарығы' },
+    antiTime: { name: 'Антиуақыт', description: 'Ең қиын режим: уақыт ағыны ашулы, жау көп, портал нәзік.', boss: 'Нөлдік Парадокс' },
+  },
+};
+
+const difficultyMetaText: Record<LanguageCode, { boss: string; waves: string; levels: string }> = {
+  ru: { boss: 'Босс', waves: 'Волн', levels: 'Уровней' },
+  en: { boss: 'Boss', waves: 'Waves', levels: 'Levels' },
+  kk: { boss: 'Босс', waves: 'Толқын', levels: 'Деңгей' },
+};
+
+const epochTabletText: Record<LanguageCode, {
+  title: string;
+  subtitle: string;
+  choose: string;
+  map: string;
+  waves: string;
+  back: string;
+}> = {
+  ru: {
+    title: 'Планшет эпохи',
+    subtitle: 'Выбери один из пяти уровней внутри этой временной эпохи.',
+    choose: 'Выбрать',
+    map: 'Карта',
+    waves: 'Волны',
+    back: 'Назад к эпохам',
+  },
+  en: {
+    title: 'Era Tablet',
+    subtitle: 'Choose one of five levels inside this time era.',
+    choose: 'Choose',
+    map: 'Map',
+    waves: 'Waves',
+    back: 'Back to eras',
+  },
+  kk: {
+    title: 'Дәуір планшеті',
+    subtitle: 'Осы уақыт дәуіріндегі бес деңгейдің бірін таңда.',
+    choose: 'Таңдау',
+    map: 'Карта',
+    waves: 'Толқын',
+    back: 'Дәуірлерге қайту',
+  },
+};
+
+const achievementText: Record<LanguageCode, Partial<Record<string, { title: string; description: string }>>> = {
+  ru: {},
+  en: {
+    'first-defense': { title: 'First Line', description: 'Place your first tower.' },
+    builder: { title: 'Time Architect', description: 'Build 10 towers across all games.' },
+    'first-wave': { title: 'Wave Cleared', description: 'Clear the first wave.' },
+    'wave-master': { title: 'Line Keeper', description: 'Clear 10 waves.' },
+    hunter: { title: 'Rift Hunter', description: 'Defeat 50 mobs.' },
+    chronoslayer: { title: 'Chrono Slayer', description: 'Defeat 200 mobs.' },
+    upgrader: { title: 'Upgrade Master', description: 'Upgrade towers 8 times.' },
+    'boss-breaker': { title: 'Break the Chronomancer', description: 'Defeat a boss.' },
+    'map-runner': { title: 'Era Traveler', description: 'Clear 3 levels on the map.' },
+    'hardtry-wave-30': { title: 'Hardtry: Wave 30', description: 'Reach wave 30 in any game.' },
+    'hardtry-killer': { title: 'Hardtry: Thousand Rifts', description: 'Defeat 1000 mobs across all games.' },
+    'hardtry-architect': { title: 'Hardtry: Era Engineer', description: 'Build 100 towers across all games.' },
+    'hardtry-upgrades': { title: 'Hardtry: Maximum Power', description: 'Buy 75 tower upgrades.' },
+    'hardtry-boss-hunter': { title: 'Hardtry: Boss Hunter', description: 'Defeat 5 bosses.' },
+    'hardtry-hard-mode': { title: 'Hardtry: Rift Closed', description: 'Win on Rift difficulty.' },
+    'hardtry-antitime': { title: 'Hardtry: Anti-Time Broken', description: 'Win on Anti-Time difficulty.' },
+    'hardtry-perfect': { title: 'Hardtry: Perfect Line', description: 'Win without base damage.' },
+    'hardtry-no-skip': { title: 'Hardtry: Not a Second Back', description: 'Win without skipping a wave.' },
+  },
+  kk: {
+    'first-defense': { title: 'Бірінші сызық', description: 'Алғашқы мұнараңды қой.' },
+    builder: { title: 'Уақыт сәулетшісі', description: 'Барлық ойындарда 10 мұнара сал.' },
+    'first-wave': { title: 'Толқын қайтарылды', description: 'Бірінші толқынды өт.' },
+    'wave-master': { title: 'Сызық сақшысы', description: '10 толқынды қайтар.' },
+    hunter: { title: 'Жарық аңшысы', description: '50 мобты жең.' },
+    chronoslayer: { title: 'Хроно жойғыш', description: '200 мобты жең.' },
+    upgrader: { title: 'Жақсарту шебері', description: 'Мұнараларды 8 рет жақсарт.' },
+    'boss-breaker': { title: 'Хрономантты жең', description: 'Боссты жең.' },
+    'map-runner': { title: 'Дәуір саяхатшысы', description: 'Картада 3 деңгейді өт.' },
+    'hardtry-wave-30': { title: 'Hardtry: 30-толқын', description: 'Кез келген ойында 30-толқынға жет.' },
+    'hardtry-killer': { title: 'Hardtry: мың жарық', description: 'Барлық ойындарда 1000 мобты жең.' },
+    'hardtry-architect': { title: 'Hardtry: дәуір инженері', description: 'Барлық ойындарда 100 мұнара сал.' },
+    'hardtry-upgrades': { title: 'Hardtry: ең жоғары қуат', description: '75 мұнара жақсартуын сатып ал.' },
+    'hardtry-boss-hunter': { title: 'Hardtry: босс аңшысы', description: '5 боссты жең.' },
+    'hardtry-hard-mode': { title: 'Hardtry: жарық жабылды', description: 'Жарық қиындығында жең.' },
+    'hardtry-antitime': { title: 'Hardtry: антиуақыт бұзылды', description: 'Антиуақыт қиындығында жең.' },
+    'hardtry-perfect': { title: 'Hardtry: мінсіз сызық', description: 'Базаға зиян алмай жең.' },
+    'hardtry-no-skip': { title: 'Hardtry: бір секунд та артқа емес', description: 'Толқынды өткізбей жең.' },
+  },
+};
+
+const towerText: Record<LanguageCode, Partial<Record<TowerKind['id'], string>>> = {
+  ru: {},
+  en: {
+    arrow: 'Time Scout',
+    slow: 'Chrono Blast',
+    blast: 'Temporal Sniper',
+    rift: 'Rift Maker',
+    hourglass: 'Hourglass',
+    forge: 'Chrono Forge',
+    mirror: 'Epoch Mirror',
+    pulsar: 'Second Pulsar',
+    beacon: 'Memory Beacon',
+    archive: 'Archivist',
+    sun: 'Solar Obelisk',
+    gravity: 'Gravity Anchor',
+  },
+  kk: {
+    arrow: 'Уақыт барлаушысы',
+    slow: 'Хроно-жарылыс',
+    blast: 'Уақыт снайпері',
+    rift: 'Жарық ашушы',
+    hourglass: 'Құм сағат',
+    forge: 'Хроно-ұста',
+    mirror: 'Дәуір айнасы',
+    pulsar: 'Секунд пульсары',
+    beacon: 'Жад шамшырағы',
+    archive: 'Архивші',
+    sun: 'Күн обелискі',
+    gravity: 'Грави-якорь',
+  },
+};
+
+function fillText(template: string, values: Record<string, string | number>) {
+  return Object.entries(values).reduce((result, [key, value]) => result.split(`{${key}}`).join(String(value)), template);
+}
+
+function getLevelUiText(level: LevelMapItem, language: LanguageCode) {
+  return levelText[language][level.id] ?? { title: level.title, mapTitle: level.mapTitle };
+}
+
+function getDifficultyUiText(mode: Difficulty, language: LanguageCode) {
+  return difficultyText[language][mode.id];
+}
+
+function getAchievementUiText(achievement: Achievement, language: LanguageCode) {
+  return achievementText[language][achievement.id] ?? { title: achievement.title, description: achievement.description };
+}
+
+function getTowerUiName(tower: TowerKind, language: LanguageCode) {
+  return towerText[language][tower.id] ?? tower.name;
+}
+
+function getPlacementUiLabel(tower: TowerKind, language: LanguageCode) {
+  if (language === 'en') return tower.elevatedOnly ? 'highland only' : 'ground';
+  if (language === 'kk') return tower.elevatedOnly ? 'тек биіктік' : 'жер';
+  return getPlacementLabel(tower);
+}
+
+function getChallengeUiText(challenge: DailyChallenge, language: LanguageCode) {
+  const t = uiText[language];
+
+  if (challenge.rewardXp === 1800) {
+    return {
+      title: t.monthlyTitle,
+      description: fillText(t.monthlyDescription, { count: challenge.goal }),
+    };
+  }
+
+  if (challenge.rewardXp === 420) {
+    const isWaveChallenge = challenge.goal === 24;
+    return {
+      title: isWaveChallenge ? t.weeklyWavesTitle : t.weeklyKillsTitle,
+      description: fillText(isWaveChallenge ? t.weeklyWavesDescription : t.weeklyKillsDescription, { count: challenge.goal }),
+    };
+  }
+
+  const isWaveChallenge = challenge.goal === 3 || challenge.goal === 5;
+  return {
+    title: isWaveChallenge ? t.dailyWavesTitle : t.dailyKillsTitle,
+    description: fillText(isWaveChallenge ? t.dailyWavesDescription : t.dailyKillsDescription, { count: challenge.goal }),
+  };
+}
+
 const emptyRetentionProfile: RetentionProfile = {
   user_id: '',
   display_name: 'Игрок',
@@ -462,6 +1148,19 @@ const emptyRetentionProfile: RetentionProfile = {
   monthly_kills: 0,
   monthly_waves: 0,
   monthly_completed: false,
+  completed_level_ids: [],
+  achievement_stats: {
+    totalKills: 0,
+    wavesCompleted: 0,
+    towersBuilt: 0,
+    upgradesBought: 0,
+    bossesDefeated: 0,
+    maxWaveReached: 0,
+    hardVictories: 0,
+    antiTimeVictories: 0,
+    noDamageVictories: 0,
+    noSkipVictories: 0,
+  },
 };
 
 const emptyAchievementStats: AchievementStats = {
@@ -1734,6 +2433,32 @@ function readAchievementStats() {
   }
 }
 
+function normalizeAchievementStats(stats: unknown): AchievementStats {
+  if (!stats || typeof stats !== 'object') return emptyAchievementStats;
+
+  const partialStats = stats as Partial<Record<keyof AchievementStats, unknown>>;
+  return {
+    totalKills: typeof partialStats.totalKills === 'number' ? partialStats.totalKills : 0,
+    wavesCompleted: typeof partialStats.wavesCompleted === 'number' ? partialStats.wavesCompleted : 0,
+    towersBuilt: typeof partialStats.towersBuilt === 'number' ? partialStats.towersBuilt : 0,
+    upgradesBought: typeof partialStats.upgradesBought === 'number' ? partialStats.upgradesBought : 0,
+    bossesDefeated: typeof partialStats.bossesDefeated === 'number' ? partialStats.bossesDefeated : 0,
+    maxWaveReached: typeof partialStats.maxWaveReached === 'number' ? partialStats.maxWaveReached : 0,
+    hardVictories: typeof partialStats.hardVictories === 'number' ? partialStats.hardVictories : 0,
+    antiTimeVictories: typeof partialStats.antiTimeVictories === 'number' ? partialStats.antiTimeVictories : 0,
+    noDamageVictories: typeof partialStats.noDamageVictories === 'number' ? partialStats.noDamageVictories : 0,
+    noSkipVictories: typeof partialStats.noSkipVictories === 'number' ? partialStats.noSkipVictories : 0,
+  };
+}
+
+function normalizeCompletedLevelIds(levelIds: unknown) {
+  if (!Array.isArray(levelIds)) return [];
+
+  return levelIds.filter((levelId): levelId is number =>
+    typeof levelId === 'number' && Number.isInteger(levelId) && levelId > 0,
+  );
+}
+
 function readTutorialSeen() {
   return window.localStorage.getItem(tutorialSeenStorageKey) === 'true';
 }
@@ -1778,6 +2503,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const [leaderboard, setLeaderboard] = useState<RetentionLeaderboardEntry[]>([]);
   const [retentionLoading, setRetentionLoading] = useState(Boolean(userId));
   const [selectedLevelId, setSelectedLevelId] = useState(1);
+  const [selectedEraMissionId, setSelectedEraMissionId] = useState(1);
   const [difficulty, setDifficulty] = useState<Difficulty['id']>('easy');
   const selectedDifficultyData = difficultyModes.find((mode) => mode.id === difficulty) ?? difficultyModes[0];
   const selectedBossProfile = bossProfiles[difficulty];
@@ -1824,12 +2550,23 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const isLoadoutReady = equippedTowerIds.length >= Math.min(requiredLoadoutSize, availableTowerKinds.length);
   const selectedPlacedTower = towers.find((tower) => tower.id === selectedTowerId) ?? null;
   const selectedLevel = levelMap.find((level) => level.id === selectedLevelId) ?? levelMap[0];
-  const selectedBattleMap = battleMaps.find((battleMap) => battleMap.id === selectedLevelId) ?? battleMaps[0];
+  const selectedEraMissions = eraMissionCatalog[selectedLevel.mapArea];
+  const selectedEraMission = selectedEraMissions.find((mission) => mission.id === selectedEraMissionId) ?? selectedEraMissions[0];
+  const selectedMissionStartWave = Math.min(maxWaves, selectedLevel.startWave + selectedEraMission.startWaveOffset);
+  const selectedProgressLevelId = selectedLevel.id * 10 + selectedEraMission.id;
+  const selectedBattleMap = useMemo(
+    () => getMissionBattleMap(selectedLevel, selectedEraMission, language),
+    [language, selectedEraMission, selectedLevel],
+  );
   const enemiesInCurrentWave = 5 + Math.ceil(wave * 1.45) + selectedDifficultyData.extraEnemies + (isBossWave(wave) ? 1 : 0);
   const waveElapsedSeconds = Math.max(0, getWaveDuration(wave) - waveTimeLeft);
   const skipSecondsLeft = Math.max(0, skipUnlockDelay - waveElapsedSeconds);
   const canSkipWave = isWaveRunning && skipSecondsLeft === 0 && baseHp > 0 && !isVictory;
-  const playerLabel = playerName.trim() || retentionProfile.display_name || userEmail || 'Гость';
+  const t = uiText[language];
+  const selectedLevelUi = getLevelUiText(selectedLevel, language);
+  const selectedMissionTitle = selectedEraMission.title[language];
+  const epochTablet = epochTabletText[language];
+  const playerLabel = playerName.trim() || retentionProfile.display_name || userEmail || t.guest;
   const completedAchievements = achievements.filter(
     (achievement) => getAchievementProgress(achievement, achievementStats, completedLevelIds.length) >= achievement.goal,
   ).length;
@@ -1846,6 +2583,12 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const dailyProgressPercent = Math.round((dailyProgress / dailyChallenge.goal) * 100);
   const weeklyProgressPercent = Math.round((weeklyProgress / weeklyChallenge.goal) * 100);
   const monthlyProgressPercent = Math.round((monthlyProgress / monthlyChallenge.goal) * 100);
+
+  function changeLanguage(nextLanguage: LanguageCode) {
+    setLanguage(nextLanguage);
+    window.localStorage.setItem(languageStorageKey, nextLanguage);
+    document.documentElement.lang = nextLanguage;
+  }
 
   function getAudioContext() {
     if (!audioContextRef.current) {
@@ -1929,6 +2672,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       monthly_kills: profile.monthly_kills,
       monthly_waves: profile.monthly_waves,
       monthly_completed: profile.monthly_completed,
+      completed_level_ids: profile.completed_level_ids,
+      achievement_stats: profile.achievement_stats,
     };
   }
 
@@ -1954,6 +2699,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       monthly_kills: row?.monthly_kills ?? 0,
       monthly_waves: row?.monthly_waves ?? 0,
       monthly_completed: row?.monthly_completed ?? false,
+      completed_level_ids: normalizeCompletedLevelIds(row?.completed_level_ids),
+      achievement_stats: normalizeAchievementStats(row?.achievement_stats),
     });
   }
 
@@ -2008,7 +2755,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       const fallbackName = playerName.trim() || savedName || userEmail || 'Игрок';
       const { data } = await supabase
         .from('retention_profiles')
-        .select('user_id, display_name, xp, streak_days, last_check_in_date, best_wave, total_kills, daily_challenge_date, daily_kills, daily_waves, daily_completed, weekly_challenge_date, weekly_kills, weekly_waves, weekly_completed, monthly_challenge_date, monthly_kills, monthly_waves, monthly_completed')
+        .select('user_id, display_name, xp, streak_days, last_check_in_date, best_wave, total_kills, daily_challenge_date, daily_kills, daily_waves, daily_completed, weekly_challenge_date, weekly_kills, weekly_waves, weekly_completed, monthly_challenge_date, monthly_kills, monthly_waves, monthly_completed, completed_level_ids, achievement_stats')
         .eq('user_id', userId)
         .maybeSingle();
 
@@ -2020,6 +2767,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           ? { ...profile, display_name: savedName }
           : profile;
       setRetentionProfile(profileWithSavedName);
+      setCompletedLevelIds(profileWithSavedName.completed_level_ids);
+      setAchievementStats(profileWithSavedName.achievement_stats);
       if (profileWithSavedName.display_name.trim()) {
         setPlayerName(profileWithSavedName.display_name);
         savePlayerName(profileWithSavedName.display_name);
@@ -2048,6 +2797,27 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     window.localStorage.setItem(languageStorageKey, language);
     document.documentElement.lang = language;
   }, [language]);
+
+  function clearWindowTransitionTimers() {
+    windowTransitionTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    windowTransitionTimersRef.current = [];
+  }
+
+  function openScreenWithTransition(nextScreen: GameScreen) {
+    if (nextScreen === 'transition' || screen === nextScreen) {
+      setScreen(nextScreen);
+      return;
+    }
+
+    clearWindowTransitionTimers();
+    setScreen('transition');
+
+    const openTimer = window.setTimeout(() => {
+      setScreen(nextScreen);
+    }, 900);
+
+    windowTransitionTimersRef.current = [openTimer];
+  }
 
   useEffect(() => {
     if (!userId || !supabase || retentionLoading) return;
@@ -2362,17 +3132,19 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
   useEffect(() => {
     window.localStorage.setItem(levelMapStorageKey, JSON.stringify(completedLevelIds));
+    setRetentionProfile((current) => ({ ...current, completed_level_ids: completedLevelIds }));
   }, [completedLevelIds]);
 
   useEffect(() => {
     window.localStorage.setItem(achievementStatsStorageKey, JSON.stringify(achievementStats));
+    setRetentionProfile((current) => ({ ...current, achievement_stats: achievementStats }));
   }, [achievementStats]);
 
   useEffect(() => {
     if (!isVictory) return;
 
     setCompletedLevelIds((current) =>
-      current.includes(selectedLevelId) ? current : [...current, selectedLevelId],
+      current.includes(selectedProgressLevelId) ? current : [...current, selectedProgressLevelId],
     );
     setAchievementStats((current) => ({
       ...current,
@@ -2381,7 +3153,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       noDamageVictories: current.noDamageVictories + (runChallengeRef.current.tookDamage ? 0 : 1),
       noSkipVictories: current.noSkipVictories + (runChallengeRef.current.skippedWave ? 0 : 1),
     }));
-  }, [difficulty, isVictory, selectedLevelId]);
+  }, [difficulty, isVictory, selectedProgressLevelId]);
 
   useEffect(() => {
     if (baseHp === 0) {
@@ -2413,7 +3185,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     activateAudio();
     updateRetentionProfile((current) => ({ ...current, display_name: cleanName }));
     setProfileError('');
-    setScreen(tutorialSeen ? 'start' : 'tutorial');
+    openScreenWithTransition(tutorialSeen ? 'start' : 'tutorial');
   }
 
   function openNameEditor() {
@@ -2449,7 +3221,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     setPracticeTutorialActive(false);
     window.localStorage.setItem(tutorialSeenStorageKey, 'true');
     setTutorialSeen(true);
-    setScreen(nextScreen);
+    openScreenWithTransition(nextScreen);
   }
 
   function enterGameFromWelcome() {
@@ -2483,7 +3255,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     setSelectedTower('arrow');
     setPracticeTutorialActive(true);
     setTutorialStep('selectTower');
-    setScreen('battle');
+    openScreenWithTransition('battle');
     setGameStartedAt(Date.now());
     setDefeatDurationSeconds(0);
     setMessage('Обучение началось: выбери первую башню в панели слева.');
@@ -2628,7 +3400,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     setMessage(`${getTowerKind(tower.kind).name}: цель — ${getTargetPriorityName(targetPriority).toLowerCase()}.`);
   }
 
-  function resetGame(mode: Difficulty, startWaveNumber = selectedLevel.startWave) {
+  function resetGame(mode: Difficulty, startWaveNumber = selectedMissionStartWave) {
     setEraIndex(0);
     setWave(startWaveNumber);
     setCoins(mode.startCoins);
@@ -2649,9 +3421,9 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   function selectDifficulty(mode: Difficulty) {
     if (isWaveRunning) return;
     setDifficulty(mode.id);
-    resetGame(mode, selectedLevel.startWave);
+    resetGame(mode, selectedMissionStartWave);
     setTowerSlots([null, null, null, null, null, null]);
-    setScreen('loadout');
+    openScreenWithTransition('loadout');
     setMessage(`${selectedLevel.title}. Карта: ${selectedBattleMap.name}. ${mode.name}: собери набор башен перед входом в бой.`);
   }
 
@@ -2661,7 +3433,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       return;
     }
 
-    setScreen('battle');
+    openScreenWithTransition('battle');
     setGameStartedAt(Date.now());
     setDefeatDurationSeconds(0);
     setCommentatorMessage('');
@@ -2670,13 +3442,23 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
   function selectLevel(level: LevelMapItem) {
     if (isWaveRunning) return;
-    const battleMap = battleMaps.find((mapLayout) => mapLayout.id === level.id) ?? battleMaps[0];
 
     activateAudio();
     setSelectedLevelId(level.id);
-    setScreen('difficulty');
+    setSelectedEraMissionId(1);
+    openScreenWithTransition('epochLevels');
     setCommentatorMessage('');
-    setMessage(`${level.title}: ${battleMap.name}. ${battleMap.description}`);
+    setMessage(`${getLevelUiText(level, language).mapTitle}: ${eraMissionCatalog[level.mapArea].length} levels available.`);
+  }
+
+  function selectEraMission(mission: EraMission) {
+    if (isWaveRunning) return;
+
+    activateAudio();
+    setSelectedEraMissionId(mission.id);
+    openScreenWithTransition('difficulty');
+    setCommentatorMessage('');
+    setMessage(`${mission.title[language]}: ${mission.description[language]}`);
   }
 
   async function requestWaveCommentary(waveNumber: number, eraName: string, difficultyData: Difficulty) {
@@ -2730,7 +3512,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     }
 
     if (!isLoadoutReady) {
-      setScreen('loadout');
+      openScreenWithTransition('loadout');
       setMessage(`Сначала собери набор: минимум ${Math.min(requiredLoadoutSize, availableTowerKinds.length)} башни.`);
       return;
     }
@@ -2791,15 +3573,15 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   }
 
   function restartGame() {
-    resetGame(selectedDifficultyData, selectedLevel.startWave);
+    resetGame(selectedDifficultyData, selectedMissionStartWave);
     setGameStartedAt(Date.now());
     setMessage('Поставь башни и запусти волну.');
   }
 
   function returnToMainMenu() {
-    resetGame(selectedDifficultyData, selectedLevel.startWave);
+    resetGame(selectedDifficultyData, selectedMissionStartWave);
     setSelectedTowerId(null);
-    setScreen('start');
+    openScreenWithTransition('start');
     setMessage('Поставь башни и запусти первую волну.');
   }
 
@@ -2852,21 +3634,21 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     const leaderboardRows = leaderboard.length > 0 ? leaderboard : [retentionProfile];
     const timedChallenges = [
       {
-        label: 'Ежедневное',
+        label: t.daily,
         challenge: dailyChallenge,
         progress: dailyProgress,
         progressPercent: dailyProgressPercent,
         isCompleted: retentionProfile.daily_completed,
       },
       {
-        label: 'Еженедельное',
+        label: t.weekly,
         challenge: weeklyChallenge,
         progress: weeklyProgress,
         progressPercent: weeklyProgressPercent,
         isCompleted: retentionProfile.weekly_completed,
       },
       {
-        label: 'Месяц',
+        label: t.month,
         challenge: monthlyChallenge,
         progress: monthlyProgress,
         progressPercent: monthlyProgressPercent,
@@ -2878,57 +3660,61 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       <section className={isProfileVariant ? 'retention-panel profile-retention' : 'retention-panel'}>
         <div className="retention-head">
           <div>
-            <strong>Прогресс защитника</strong>
-            <span>{userId ? 'сохраняется в Supabase' : 'войдите, чтобы сохранять онлайн'}</span>
+            <strong>{t.defenderProgress}</strong>
+            <span>{userId ? t.savedOnline : t.signInToSave}</span>
           </div>
-          <em>{retentionLoading ? '...' : `${retentionProfile.streak_days} дн. серия`}</em>
+          <em>{retentionLoading ? '...' : <>{retentionProfile.streak_days} {t.dayStreakShort}</>}</em>
         </div>
 
         <div className="retention-grid">
           <div className="retention-stat">
-            <span>Уровень</span>
+            <span>{t.level}</span>
             <strong>{retentionLevel}</strong>
             <small>{retentionProfile.xp} XP</small>
           </div>
           <div className="retention-stat">
-            <span>Лучшая волна</span>
+            <span>{t.bestWave}</span>
             <strong>{retentionProfile.best_wave}</strong>
-            <small>{retentionProfile.total_kills} побед</small>
+            <small>{retentionProfile.total_kills} {t.wins}</small>
           </div>
           <div className="retention-stat">
-            <span>Серия</span>
+            <span>{t.streak}</span>
             <strong>{retentionProfile.streak_days}</strong>
-            <small>дней подряд</small>
+            <small>{t.daysInRow}</small>
           </div>
         </div>
 
-        <div className="xp-track" aria-label={`XP до следующего уровня ${levelProgressPercent}%`}>
+        <div className="xp-track" aria-label={fillText(t.xpToNext, { level: retentionLevel + 1, xp: Math.max(0, nextLevelXp - retentionProfile.xp) })}>
           <span style={{ width: `${Math.max(3, Math.min(100, levelProgressPercent))}%` }} />
         </div>
         <p className="xp-caption">
-          До уровня {retentionLevel + 1}: {Math.max(0, nextLevelXp - retentionProfile.xp)} XP
+          {fillText(t.xpToNext, { level: retentionLevel + 1, xp: Math.max(0, nextLevelXp - retentionProfile.xp) })}
         </p>
 
         <div className="challenge-list">
-          {timedChallenges.map((item) => (
-            <div className="challenge-item" key={item.label}>
-              <div className="daily-challenge">
-                <div>
-                  <strong>{item.label}: {item.challenge.title}</strong>
-                  <span>{item.challenge.description} Награда: {item.challenge.rewardXp} XP.</span>
+          {timedChallenges.map((item) => {
+            const challengeText = getChallengeUiText(item.challenge, language);
+
+            return (
+              <div className="challenge-item" key={item.label}>
+                <div className="daily-challenge">
+                  <div>
+                    <strong>{item.label}: {challengeText.title}</strong>
+                    <span>{challengeText.description} {t.reward}: {item.challenge.rewardXp} XP.</span>
+                  </div>
+                  <small>{item.isCompleted ? t.done : `${item.progress}/${item.challenge.goal}`}</small>
                 </div>
-                <small>{item.isCompleted ? 'готово' : `${item.progress}/${item.challenge.goal}`}</small>
+                <div className="daily-track" aria-label={`${item.label} ${item.progressPercent}%`}>
+                  <span style={{ width: `${Math.max(3, Math.min(100, item.progressPercent))}%` }} />
+                </div>
               </div>
-              <div className="daily-track" aria-label={`${item.label} задание ${item.progressPercent}%`}>
-                <span style={{ width: `${Math.max(3, Math.min(100, item.progressPercent))}%` }} />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {!isProfileVariant && (
           <div className="leaderboard-mini">
-            <strong>Лидеры</strong>
+            <strong>{t.leaders}</strong>
             {leaderboardRows.slice(0, 5).map((entry, index) => (
               <span key={`${entry.display_name}-${index}`}>
                 <b>{index + 1}</b>
@@ -2962,22 +3748,22 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       {screen !== 'welcome' && screen !== 'transition' && (
       <div className="game-top">
         <div>
-          <p className="hello">Игрок: {playerLabel}</p>
+          <p className="hello">{t.player}: {playerLabel}</p>
           <p className="era-line">
-            {screen === 'battle' ? `${era.name} · ${era.year}` : selectedLevel.title}
+            {screen === 'battle' ? `${era.name} - ${era.year}` : selectedLevelUi.title}
           </p>
         </div>
         {screen === 'battle' && (
-          <span className="difficulty-badge">Новая линия готова · {selectedDifficultyData.name}</span>
+          <span className="difficulty-badge">{selectedDifficultyData.name}</span>
         )}
       </div>
       )}
 
       {screen === 'battle' && baseHp === 0 && (
         <div className="retry-panel">
-          <span>HP базы закончилось. Попробуй другую расстановку.</span>
+          <span>{t.baseHpEnded}</span>
           <button className="secondary" type="button" onClick={restartGame}>
-            Попробовать ещё раз
+            {t.retry}
           </button>
         </div>
       )}
@@ -2986,7 +3772,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         <LanguageStartScreen
           language={language}
           isExiting={welcomeExiting}
-          onLanguageChange={setLanguage}
+          onLanguageChange={changeLanguage}
           onStart={enterGameFromWelcome}
         />
       )}
@@ -2998,25 +3784,25 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           <span className="broken-clock screen-clock profile-clock" aria-hidden="true" />
           <span className="time-crack screen-crack profile-crack" aria-hidden="true" />
           <div className="screen-heading">
-            <h3>Перед началом</h3>
-            <p>Введи имя и возраст игрока, чтобы начать защиту линии времени.</p>
+            <h3>{t.profileTitle}</h3>
+            <p>{t.profileSubtitle}</p>
           </div>
           {renderRetentionPanel('profile')}
           <form className="player-form" onSubmit={submitPlayerProfile}>
             <label>
-              Имя
+              {t.name}
               <input
                 type="text"
                 value={playerName}
                 onChange={(event) => setPlayerName(event.target.value)}
-                placeholder="Например, Алишер"
+                placeholder={t.namePlaceholder}
                 autoComplete="given-name"
                 minLength={3}
                 maxLength={21}
               />
             </label>
             <label>
-              Возраст
+              {t.age}
               <input
                 type="number"
                 value={playerAge}
@@ -3027,7 +3813,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
               />
             </label>
             {profileError && <p className="form-error">{profileError}</p>}
-            <button type="submit">Начать</button>
+            <button type="submit">{t.start}</button>
           </form>
         </section>
       )}
@@ -3037,37 +3823,37 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           <span className="broken-clock screen-clock tutorial-clock" aria-hidden="true" />
           <span className="time-crack screen-crack tutorial-crack" aria-hidden="true" />
           <div className="screen-heading">
-            <h3>Практическое обучение</h3>
-            <p>Сейчас мы сразу перейдем на карту битвы: комментатор покажет, какую башню выбрать, куда ее поставить и когда запускать волну.</p>
+            <h3>{t.tutorialTitle}</h3>
+            <p>{t.tutorialSubtitle}</p>
           </div>
           <div className="tutorial-grid">
             <article className="tutorial-card">
               <span>1</span>
-              <strong>Выбери уровень</strong>
-              <p>На карте непройденные территории бледные. После победы они получают цвет эпохи.</p>
+              <strong>{t.tutorialStepOneTitle}</strong>
+              <p>{t.tutorialStepOneText}</p>
             </article>
             <article className="tutorial-card">
               <span>2</span>
-              <strong>Собери башни</strong>
-              <p>Перед боем выбери минимум {Math.min(requiredLoadoutSize, availableTowerKinds.length)} башни.</p>
+              <strong>{t.tutorialStepTwoTitle}</strong>
+              <p>{fillText(t.tutorialStepTwoText, { count: Math.min(requiredLoadoutSize, availableTowerKinds.length) })}</p>
             </article>
             <article className="tutorial-card">
               <span>3</span>
-              <strong>Ставь не на дороге</strong>
-              <p>Башни ставятся только на специальные клетки. Дорога нужна врагам для движения.</p>
+              <strong>{t.tutorialStepThreeTitle}</strong>
+              <p>{t.tutorialStepThreeText}</p>
             </article>
             <article className="tutorial-card">
               <span>4</span>
-              <strong>Улучшай защиту</strong>
-              <p>Выбирай башню на поле, улучшай её и меняй приоритет цели.</p>
+              <strong>{t.tutorialStepFourTitle}</strong>
+              <p>{t.tutorialStepFourText}</p>
             </article>
           </div>
           <div className="tutorial-actions">
             <button type="button" onClick={startPracticeTutorial}>
-              Начать практику
+              {t.startPractice}
             </button>
             <button className="secondary" type="button" onClick={() => closeTutorial('start')}>
-              Пропустить
+              {t.skip}
             </button>
           </div>
         </section>
@@ -3078,12 +3864,12 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           <span className="broken-clock screen-clock menu-clock" aria-hidden="true" />
           <span className="time-crack screen-crack menu-crack" aria-hidden="true" />
           <div>
-            <h3>Начальный экран</h3>
-            <p>Выбери старт, чтобы перейти к карте уровней. Настройки камеры уже доступны в бою: мышь крутит карту, колесико меняет масштаб.</p>
+            <h3>{t.startTitle}</h3>
+            <p>{t.startSubtitle}</p>
             <div className="name-editor">
               {!isEditingName ? (
                 <button className="secondary" type="button" onClick={openNameEditor}>
-                  Изменить имя
+                  {t.editName}
                 </button>
               ) : (
                 <form onSubmit={submitNameChange}>
@@ -3091,39 +3877,52 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                     type="text"
                     value={nameDraft}
                     onChange={(event) => setNameDraft(event.target.value)}
-                    placeholder="Имя игрока"
+                    placeholder={t.playerName}
                     autoComplete="given-name"
                     minLength={3}
                     maxLength={21}
                   />
-                  <button type="submit">Сохранить</button>
+                  <button type="submit">{t.save}</button>
                   <button className="ghost" type="button" onClick={() => {
                     setIsEditingName(false);
                     setProfileError('');
                   }}>
-                    Отмена
+                    {t.cancel}
                   </button>
                 </form>
               )}
               {profileError && <p className="form-error">{profileError}</p>}
+            </div>
+            <div className="language-picker" aria-label={t.language}>
+              {languageOptions.map((option) => (
+                <button
+                  className={option.code === language ? 'active' : ''}
+                  type="button"
+                  key={option.code}
+                  onClick={() => changeLanguage(option.code)}
+                  aria-pressed={option.code === language}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
             {renderRetentionPanel('main')}
           </div>
           <div className="menu-actions">
             <button type="button" onClick={() => {
               activateAudio();
-              setScreen('levels');
+              openScreenWithTransition('levels');
             }}>
-              Начать
+              {t.start}
             </button>
-            <button className="secondary" type="button" onClick={() => setScreen('achievements')}>
-              Достижения {completedAchievements}/{achievements.length}
+            <button className="secondary" type="button" onClick={() => openScreenWithTransition('achievements')}>
+              {t.achievements} {completedAchievements}/{achievements.length}
             </button>
-            <button className="secondary" type="button" onClick={() => setScreen('settings')}>
-              Настройки
+            <button className="secondary" type="button" onClick={() => openScreenWithTransition('settings')}>
+              {t.settings}
             </button>
-            <button className="secondary" type="button" onClick={() => setScreen('tutorial')}>
-              Туториал
+            <button className="secondary" type="button" onClick={() => openScreenWithTransition('tutorial')}>
+              {t.tutorial}
             </button>
           </div>
         </section>
@@ -3134,12 +3933,12 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           <span className="broken-clock screen-clock achievement-clock" aria-hidden="true" />
           <span className="time-shard achievement-shard" aria-hidden="true" />
           <div className="screen-heading">
-            <h3>Достижения</h3>
-            <p>Выполняй цели во время защиты портала. Прогресс сохраняется на этом компьютере.</p>
+            <h3>{t.achievementsTitle}</h3>
+            <p>{t.achievementsSubtitle}</p>
           </div>
           <div className="achievement-summary">
             <strong>{completedAchievements}/{achievements.length}</strong>
-            <span>получено</span>
+            <span>{t.earned}</span>
           </div>
           <div className="achievement-list">
             {achievements.map((achievement) => {
@@ -3147,6 +3946,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
               const isUnlocked = progress >= achievement.goal;
               const progressPercent = Math.round((progress / achievement.goal) * 100);
               const isHardtry = achievement.id.startsWith('hardtry-');
+              const achievementUi = getAchievementUiText(achievement, language);
 
               return (
                 <article
@@ -3161,13 +3961,13 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                     {isUnlocked ? '✓' : '•'}
                   </div>
                   <div>
-                    <strong>{achievement.title}</strong>
-                    <p>{achievement.description}</p>
-                    <div className="achievement-progress" aria-label={`Прогресс ${progress} из ${achievement.goal}`}>
+                    <strong>{achievementUi.title}</strong>
+                    <p>{achievementUi.description}</p>
+                    <div className="achievement-progress" aria-label={`${t.progress} ${progress} / ${achievement.goal}`}>
                       <span style={{ width: `${progressPercent}%` }} />
                     </div>
                     <small>
-                      {progress}/{achievement.goal} · {isUnlocked ? 'получено' : 'в процессе'}
+                      {progress}/{achievement.goal} · {isUnlocked ? t.earned : t.inProgress}
                     </small>
                   </div>
                 </article>
@@ -3175,8 +3975,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
             })}
           </div>
           <div className="menu-actions">
-            <button className="ghost" type="button" onClick={() => setScreen('start')}>
-              Назад
+            <button className="ghost" type="button" onClick={() => openScreenWithTransition('start')}>
+              {t.back}
             </button>
           </div>
         </section>
@@ -3187,12 +3987,25 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           <span className="broken-clock screen-clock achievement-clock" aria-hidden="true" />
           <span className="time-shard achievement-shard" aria-hidden="true" />
           <div className="screen-heading">
-            <h3>Настройки</h3>
-            <p>Здесь можно быстро вернуть камеру к стандартному виду или открыть обучение.</p>
+            <h3>{t.settings}</h3>
+            <p>{t.settingsSubtitle}</p>
           </div>
           <div className="achievement-summary">
             <strong>{Math.round(boardZoom * 100)}%</strong>
-            <span>масштаб камеры</span>
+            <span>{t.cameraZoom}</span>
+          </div>
+          <div className="language-picker" aria-label={t.language}>
+            {languageOptions.map((option) => (
+              <button
+                className={option.code === language ? 'active' : ''}
+                type="button"
+                key={option.code}
+                onClick={() => changeLanguage(option.code)}
+                aria-pressed={option.code === language}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
           <div className="menu-actions">
             <button
@@ -3201,16 +4014,16 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                 setBoardTilt(boardViewAngle);
                 setBoardTurn(358);
                 setBoardZoom(1);
-                setMessage('Камера возвращена к стандартному виду.');
+                setMessage(t.cameraReset);
               }}
             >
-              Сбросить камеру
+              {t.resetCamera}
             </button>
-            <button className="secondary" type="button" onClick={() => setScreen('tutorial')}>
-              Обучение
+            <button className="secondary" type="button" onClick={() => openScreenWithTransition('tutorial')}>
+              {t.tutorial}
             </button>
-            <button className="ghost" type="button" onClick={() => setScreen('start')}>
-              Назад
+            <button className="ghost" type="button" onClick={() => openScreenWithTransition('start')}>
+              {t.back}
             </button>
           </div>
         </section>
@@ -3221,8 +4034,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           <span className="broken-clock screen-clock level-clock" aria-hidden="true" />
           <span className="time-shard level-shard" aria-hidden="true" />
           <div className="screen-heading">
-            <h3>Карта уровней</h3>
-            <p>Игрок проходит уровни по порядку, но сейчас можно выбрать любой уровень для теста.</p>
+            <h3>{t.levelMap}</h3>
+            <p>{t.levelMapSubtitle}</p>
           </div>
           <div className="level-map-layout">
             <div className="level-map-card">
@@ -3231,7 +4044,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                   'level-map',
                   ...completedLevelIds.map((levelId) => `completed-level-${levelId}`),
                 ].join(' ')}
-                aria-label="Карта уровней 30 на 30"
+                aria-label={t.levelMap}
               >
                 <span className="map-orbit orbit-a" aria-hidden="true" />
                 <span className="map-orbit orbit-b" aria-hidden="true" />
@@ -3250,7 +4063,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                 <span className="map-rift" aria-hidden="true">Разлом времени</span>
                 {levelMap.map((level) => {
                   const position = levelMapPositions[level.id];
-                  const isCompleted = completedLevelIds.includes(level.id);
+                  const isCompleted = completedLevelIds.includes(level.id) || completedLevelIds.some((levelId) => Math.floor(levelId / 10) === level.id);
                   const battleMap = battleMaps.find((mapLayout) => mapLayout.id === level.id) ?? battleMaps[0];
 
                   return (
@@ -3270,26 +4083,26 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                       }}
                     >
                       <span className="level-number">{level.id}</span>
-                      <small>{isCompleted ? 'Открыто' : 'Не пройдено'}</small>
-                      <strong>{level.mapTitle}</strong>
+                      <small>{isCompleted ? t.opened : t.notCompleted}</small>
+                      <strong>{getLevelUiText(level, language).mapTitle}</strong>
                       <em>{battleMap.name}: {battleMap.description}</em>
                     </button>
                   );
                 })}
               </div>
             </div>
-            <aside className="map-legend" aria-label="Легенда карты">
-              <strong>Легенда</strong>
-              <span><i className="legend-road" />Дорога врагов</span>
-              <span><i className="legend-platform" />Платформа для башни</span>
-              <span><i className="legend-rift-small" />Искажение времени</span>
-              <span><i className="legend-rift" />Разлом времени</span>
-              <span><i className="legend-base" />База игрока</span>
+            <aside className="map-legend" aria-label={t.legend}>
+              <strong>{t.legend}</strong>
+              <span><i className="legend-road" />{t.enemyRoad}</span>
+              <span><i className="legend-platform" />{t.towerPlatform}</span>
+              <span><i className="legend-rift-small" />{t.timeDistortion}</span>
+              <span><i className="legend-rift" />{t.timeRift}</span>
+              <span><i className="legend-base" />{t.playerBase}</span>
             </aside>
           </div>
           <div className="menu-actions">
-            <button className="ghost" type="button" onClick={() => setScreen('start')}>
-              Назад
+            <button className="ghost" type="button" onClick={() => openScreenWithTransition('start')}>
+              {t.back}
             </button>
           </div>
         </section>
@@ -3303,9 +4116,9 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         </div>
         <p>
           {isVictory
-            ? 'Все 40 волн пройдены. Портал времени стабилен.'
+            ? t.victoryMessage
             : isBossWave(wave)
-              ? `${era.description} Следующая волна с боссом.`
+              ? `${era.description} ${t.bossWaveHint}`
               : era.description}
         </p>
         <button
@@ -3315,14 +4128,57 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           disabled={isWaveRunning ? !canSkipWave : baseHp === 0 || isVictory}
         >
           {isVictory
-            ? 'Победа'
+            ? t.victory
             : isWaveRunning
               ? skipSecondsLeft > 0
-                ? `Скип ${skipSecondsLeft}с`
-                : 'Скип'
-              : 'Запустить'}
+                ? `${t.waveSkip} ${skipSecondsLeft}${t.seconds}`
+                : t.waveSkip
+              : t.launch}
         </button>
       </div>
+      )}
+
+      {screen === 'epochLevels' && (
+        <section className="epoch-tablet-screen">
+          <div className="epoch-tablet-grip">
+            <div className="epoch-tablet">
+              <span className="tablet-scanline" aria-hidden="true" />
+              <span className="tablet-corner tablet-corner-a" aria-hidden="true" />
+              <span className="tablet-corner tablet-corner-b" aria-hidden="true" />
+              <div className="tablet-heading">
+                <span>{epochTablet.title}</span>
+                <h3>{selectedLevelUi.mapTitle}</h3>
+                <p>{epochTablet.subtitle}</p>
+              </div>
+              <div className="tablet-level-grid">
+                {selectedEraMissions.map((mission) => {
+                  const startWave = Math.min(maxWaves, selectedLevel.startWave + mission.startWaveOffset);
+
+                  return (
+                    <button
+                      className={mission.id === selectedEraMissionId ? 'tablet-level-card active' : 'tablet-level-card'}
+                      type="button"
+                      key={mission.id}
+                      onClick={() => selectEraMission(mission)}
+                    >
+                      <span className="tablet-level-number">{mission.id}</span>
+                      <strong>{mission.title[language]}</strong>
+                      <p>{mission.description[language]}</p>
+                      <small><b>{epochTablet.map}</b>{mission.mapHint[language]}</small>
+                      <small><b>{epochTablet.waves}</b>{startWave}-{maxWaves}</small>
+                      <em>{epochTablet.choose}</em>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="menu-actions tablet-actions">
+                <button className="ghost" type="button" onClick={() => openScreenWithTransition('levels')}>
+                  {epochTablet.back}
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
       )}
 
       {screen === 'difficulty' && (
@@ -3330,32 +4186,44 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           <span className="broken-clock screen-clock difficulty-clock" aria-hidden="true" />
           <span className="time-crack screen-crack difficulty-crack" aria-hidden="true" />
           <div className="screen-heading">
-            <h3>Выбор сложности</h3>
-            <p>{selectedLevel.title}: старт с волны {selectedLevel.startWave}. После выбора сложности откроется карта битвы.</p>
+            <h3>{t.difficulty}</h3>
+            <p>{fillText(t.difficultySubtitle, { level: selectedMissionTitle, wave: selectedMissionStartWave })}</p>
           </div>
-          <div className="difficulty-panel" aria-label="Выбор сложности">
-        {difficultyModes.map((mode) => (
-          <button
-            key={mode.id}
-            className={difficulty === mode.id ? 'difficulty-choice active' : 'difficulty-choice'}
-            type="button"
-            onClick={() => selectDifficulty(mode)}
-            disabled={isWaveRunning}
-          >
-            <span className={`difficulty-boss-portrait ${bossProfiles[mode.id].portraitClass}`}>
-              <img src={bossProfiles[mode.id].sprite} alt="" draggable={false} />
-            </span>
-            <strong>{mode.name}</strong>
-            <span>{mode.description}</span>
-            <small>
-              {bossProfiles[mode.id].name} · {mode.startCoins} монет · {mode.startBaseHp} HP базы
-            </small>
-          </button>
-        ))}
+          <div className="difficulty-panel" aria-label={t.difficulty}>
+        {difficultyModes.map((mode) => {
+          const modeText = getDifficultyUiText(mode, language);
+          const modeMetaText = difficultyMetaText[language];
+
+          return (
+            <button
+              key={mode.id}
+              className={difficulty === mode.id ? 'difficulty-choice active' : 'difficulty-choice'}
+              type="button"
+              onClick={() => selectDifficulty(mode)}
+              disabled={isWaveRunning}
+            >
+              <span className={`difficulty-boss-portrait ${bossProfiles[mode.id].portraitClass}`}>
+                <img src={bossProfiles[mode.id].sprite} alt="" draggable={false} />
+              </span>
+              <span className="difficulty-copy">
+                <strong>{modeText.name}</strong>
+                <span>{modeText.description}</span>
+              </span>
+              <span className="difficulty-meta">
+                <small><b>{modeMetaText.boss}</b>{modeText.boss}</small>
+                <small><b>{modeMetaText.waves}</b>{selectedMissionStartWave}-{maxWaves}</small>
+                <small><b>{modeMetaText.levels}</b>{selectedEraMissions.length}</small>
+              </span>
+              <small>
+                {modeText.boss} · {mode.startCoins} {t.coins} · {mode.startBaseHp} {t.baseHp}
+              </small>
+            </button>
+          );
+        })}
       </div>
           <div className="menu-actions">
-            <button className="ghost" type="button" onClick={() => setScreen('levels')}>
-              Назад к уровням
+            <button className="ghost" type="button" onClick={() => openScreenWithTransition('levels')}>
+              {t.backToLevels}
             </button>
           </div>
         </section>
@@ -3366,17 +4234,15 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           <span className="broken-clock screen-clock loadout-clock" aria-hidden="true" />
           <span className="time-crack screen-crack loadout-crack" aria-hidden="true" />
           <div className="screen-heading">
-            <h3>Собери Бестиарий</h3>
-            <p>
-              Выбери минимум {Math.min(requiredLoadoutSize, availableTowerKinds.length)} башни для уровня {selectedLevel.title}. После этого откроется поле битвы.
-            </p>
+            <h3>{t.loadout}</h3>
+            <p>{fillText(t.loadoutSubtitle, { count: Math.min(requiredLoadoutSize, availableTowerKinds.length), level: selectedMissionTitle })}</p>
           </div>
 
           <div className="loadout-layout">
-            <div className="loadout-bestiary" aria-label="Бестиарий времени">
+            <div className="loadout-bestiary" aria-label={t.bestiary}>
               <div className="loadout-panel-heading">
-                <strong>Бестиарий</strong>
-                <span>{equippedTowerIds.length}/{Math.min(requiredLoadoutSize, availableTowerKinds.length)} выбрано</span>
+                <strong>{t.bestiary}</strong>
+                <span>{equippedTowerIds.length}/{Math.min(requiredLoadoutSize, availableTowerKinds.length)} {t.selected}</span>
               </div>
               <div className="bestiary-list loadout-bestiary-list">
                 {availableTowerKinds.map((tower) => (
@@ -3388,8 +4254,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                     title={tower.levelDescriptions[0]}
                   >
                     <span>{renderTowerMark(tower)}</span>
-                    <em>{tower.name}</em>
-                    <small>{tower.cost} монет · DPS {getDps(tower.damage, tower.cooldown)} · {getPlacementLabel(tower)}</small>
+                    <em>{getTowerUiName(tower, language)}</em>
+                    <small>{tower.cost} {t.coins} · DPS {getDps(tower.damage, tower.cooldown)} · {getPlacementUiLabel(tower, language)}</small>
                   </button>
                 ))}
               </div>
@@ -3397,8 +4263,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
             <div className="loadout-slots" aria-label="Слоты башен">
               <div className="loadout-panel-heading">
-                <strong>Набор на бой</strong>
-                <span>{isLoadoutReady ? 'готов' : 'нужны башни'}</span>
+                <strong>{t.battleSet}</strong>
+                <span>{isLoadoutReady ? t.ready : t.towersNeeded}</span>
               </div>
               <div className="tower-bar loadout-tower-bar">
                 {towerSlots.map((slot, slotIndex) => {
@@ -3420,9 +4286,9 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                         disabled={!tower}
                       >
                         <span>{renderTowerMark(tower)}</span>
-                        <strong>{tower?.name ?? 'Пусто'}</strong>
+                        <strong>{tower ? getTowerUiName(tower, language) : t.empty}</strong>
                         <small>
-                          {tower ? `${tower.cost} монет · ${getPlacementLabel(tower)}` : 'Добавь из Бестиария'}
+                          {tower ? `${tower.cost} ${t.coins} · ${getPlacementUiLabel(tower, language)}` : t.addFromBestiary}
                         </small>
                       </button>
                       {tower && (
@@ -3430,7 +4296,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                           className="slot-remove"
                           type="button"
                           onClick={() => removeTowerFromSlot(slotIndex)}
-                          aria-label={`Убрать ${tower.name} из слота`}
+                          aria-label={`${t.back}: ${getTowerUiName(tower, language)}`}
                         >
                           x
                         </button>
@@ -3443,11 +4309,11 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           </div>
 
           <div className="menu-actions loadout-actions">
-            <button className="ghost" type="button" onClick={() => setScreen('difficulty')}>
-              Назад к сложности
+            <button className="ghost" type="button" onClick={() => openScreenWithTransition('difficulty')}>
+              {t.backToDifficulty}
             </button>
             <button type="button" onClick={beginBattleAfterLoadout} disabled={!isLoadoutReady}>
-              В бой
+              {t.toBattle}
             </button>
           </div>
         </section>
@@ -3457,16 +4323,16 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         <>
       {practiceTutorialActive && (
         <div className="practice-tutorial-panel">
-          <strong>Обучение в бою</strong>
+          <strong>{t.battleTutorial}</strong>
           <span>
-            {tutorialStep === 'selectTower' && 'Шаг 1: выбери башню слева.'}
-            {tutorialStep === 'placeTower' && 'Шаг 2: поставь башню на подсвеченную платформу.'}
-            {tutorialStep === 'startWave' && 'Шаг 3: запусти первую волну.'}
-            {tutorialStep === 'watchWave' && 'Шаг 4: наблюдай за дорогой, радиусом и наградами.'}
-            {tutorialStep === 'complete' && 'Готово: теперь можно играть самостоятельно.'}
+            {tutorialStep === 'selectTower' && t.tutorialSelectTower}
+            {tutorialStep === 'placeTower' && t.tutorialPlaceTower}
+            {tutorialStep === 'startWave' && t.tutorialStartWave}
+            {tutorialStep === 'watchWave' && t.tutorialWatchWave}
+            {tutorialStep === 'complete' && t.tutorialComplete}
           </span>
           <button className="ghost" type="button" onClick={() => closeTutorial('start')}>
-            Завершить
+            {t.finish}
           </button>
         </div>
       )}
@@ -3474,10 +4340,10 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         <div className="battle-side-panel">
           <div className="battle-control-panel">
             <div className="stats">
-              <span>Волна {wave}/{maxWaves}</span>
-              <span>{waveTimeLeft} сек</span>
-              <span>{coins} монет</span>
-              <span>{baseHp} HP базы</span>
+              <span>{t.wave} {wave}/{maxWaves}</span>
+              <span>{waveTimeLeft} {t.seconds}</span>
+              <span>{coins} {t.coins}</span>
+              <span>{baseHp} {t.baseHp}</span>
             </div>
           </div>
 
@@ -3502,9 +4368,9 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                       disabled={!tower}
                     >
                       <span>{renderTowerMark(tower)}</span>
-                      <strong>{tower?.name ?? 'Пусто'}</strong>
+                      <strong>{tower ? getTowerUiName(tower, language) : t.empty}</strong>
                       <small>
-                        {tower ? `${tower.cost} монет · ${getPlacementLabel(tower)}` : 'Добавь из бестиария'}
+                        {tower ? `${tower.cost} ${t.coins} · ${getPlacementUiLabel(tower, language)}` : t.addFromBestiary}
                       </small>
                     </button>
                     {tower && (
@@ -3512,7 +4378,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                         className="slot-remove"
                         type="button"
                         onClick={() => removeTowerFromSlot(slotIndex)}
-                        aria-label={`Убрать ${tower.name} из слота`}
+                        aria-label={`${t.back}: ${getTowerUiName(tower, language)}`}
                       >
                         x
                       </button>
@@ -3527,7 +4393,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         <div className="upgrade-panel">
           <div>
             <strong>
-              {getTowerKind(selectedPlacedTower.kind).name} ур. {selectedPlacedTower.level}
+              {getTowerUiName(getTowerKind(selectedPlacedTower.kind), language)} ур. {selectedPlacedTower.level}
             </strong>
             <p>
               Урон {getTowerStats(selectedPlacedTower).damage} · Радиус {getTowerStats(selectedPlacedTower).range.toFixed(1)}
@@ -3729,15 +4595,15 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
               <span className="clock-number clock-number-11" data-roman="XI">11</span>
             </span>
             <span className="defeat-mark" aria-hidden="true">!</span>
-            <h3 id="defeat-title">Поражение</h3>
-            <p>Линия времени не выдержала натиск.</p>
-            <strong>Время игры: {formatDuration(defeatDurationSeconds)}</strong>
+            <h3 id="defeat-title">{t.defeat}</h3>
+            <p>{t.defeatSubtitle}</p>
+            <strong>{t.gameTime}: {formatDuration(defeatDurationSeconds)}</strong>
             <div className="defeat-actions">
               <button type="button" onClick={restartGame}>
-                Заново
+                {t.restart}
               </button>
               <button className="secondary" type="button" onClick={returnToMainMenu}>
-                В главное меню
+                {t.mainMenu}
               </button>
             </div>
           </div>
