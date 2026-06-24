@@ -55,7 +55,7 @@ export function getEasyMonsterName(id: EasyMonsterId) {
 
 export function MonsterIcon({ id }: MonsterIconProps) {
   return (
-    <svg className="monster-icon" viewBox="0 0 64 64" role="img" aria-label={easyMonsterLabels[id]}>
+    <svg className={`monster-icon monster-icon-${id}`} viewBox="0 0 64 74" role="img" aria-label={easyMonsterLabels[id]}>
       <defs>
         <filter id={`${id}-shadow`} x="-30%" y="-25%" width="160%" height="160%" colorInterpolationFilters="sRGB">
           <feDropShadow dx="0" dy="3" stdDeviation="2" floodColor="#071517" floodOpacity="0.3" />
@@ -66,11 +66,12 @@ export function MonsterIcon({ id }: MonsterIconProps) {
           <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
         </radialGradient>
       </defs>
-      <circle className="monster-aura" cx="32" cy="34" r="28" />
+      <ellipse className="monster-ground-shadow" cx="32" cy="67" rx="18" ry="4" />
+      <circle className="monster-aura" cx="32" cy="38" r="29" />
       <MonsterShape id={id} />
       <path
         className="monster-shine"
-        d="M16 22C22 12 38 8 49 20"
+        d="M16 23C22 13 38 9 49 21"
         stroke={`url(#${id}-shine)`}
         strokeWidth="7"
         strokeLinecap="round"
@@ -84,30 +85,31 @@ function MonsterShape({ id }: MonsterIconProps) {
     case 'tickingScarab':
       return (
         <g filter="url(#tickingScarab-shadow)">
-          <ellipse cx="32" cy="36" rx="18" ry="14" fill="#2d5674" stroke="#09151d" strokeWidth="4" />
-          <path d="M18 36H8M46 36H56M22 24L13 16M42 24L51 16M22 48L13 56M42 48L51 56" stroke="#d8b56b" strokeWidth="4" strokeLinecap="round" />
-          <circle cx="32" cy="36" r="10" fill="#172534" stroke="#d8b56b" strokeWidth="4" />
-          <path d="M32 28V37L39 41" stroke="#9ceeff" strokeWidth="3" strokeLinecap="round" />
+          <path d="M19 33L9 26M19 43H7M22 53L14 65M45 33L55 26M45 43H57M42 53L50 65" stroke="#d8b56b" strokeWidth="4" strokeLinecap="round" />
+          <ellipse cx="32" cy="43" rx="17" ry="20" fill="#2d5674" stroke="#09151d" strokeWidth="4" />
+          <circle cx="32" cy="38" r="10" fill="#172534" stroke="#d8b56b" strokeWidth="4" />
+          <path d="M32 30V39L39 43" stroke="#9ceeff" strokeWidth="3" strokeLinecap="round" />
+          <path d="M25 60H39" stroke="#09151d" strokeWidth="4" strokeLinecap="round" />
         </g>
       );
     case 'lostSecond':
       return (
         <g filter="url(#lostSecond-shadow)">
-          <path d="M32 9C48 19 49 43 32 58C15 43 16 19 32 9Z" fill="#66dff0" stroke="#102332" strokeWidth="4" />
+          <path d="M32 8C47 17 50 34 43 47L48 66L36 59L32 70L27 59L16 66L21 47C14 34 17 17 32 8Z" fill="#66dff0" stroke="#102332" strokeWidth="4" strokeLinejoin="round" />
           <circle cx="25" cy="31" r="4" fill="#102332" />
           <circle cx="39" cy="31" r="4" fill="#102332" />
-          <path d="M26 43C30 46 35 46 39 43" stroke="#102332" strokeWidth="4" strokeLinecap="round" />
-          <path d="M18 18L11 11M47 18L54 11" stroke="#dffcff" strokeWidth="4" strokeLinecap="round" />
+          <path d="M25 45C30 48 35 48 40 45" stroke="#102332" strokeWidth="4" strokeLinecap="round" />
+          <path d="M19 20L10 13M46 20L55 13" stroke="#dffcff" strokeWidth="4" strokeLinecap="round" />
         </g>
       );
     case 'shardRunner':
       return (
         <g filter="url(#shardRunner-shadow)">
-          <path d="M32 8L48 23L42 49L22 55L14 26L32 8Z" fill="#9bb5c4" stroke="#111820" strokeWidth="4" strokeLinejoin="round" />
-          <path d="M31 10L28 33L43 49M16 27L28 33L22 54M28 33L48 23" stroke="#5c7482" strokeWidth="3" strokeLinecap="round" />
-          <circle cx="26" cy="28" r="4" fill="#102332" />
+          <path d="M32 7L47 21L42 45L49 66L36 57L30 70L25 56L14 66L22 45L15 25L32 7Z" fill="#9bb5c4" stroke="#111820" strokeWidth="4" strokeLinejoin="round" />
+          <path d="M31 10L28 34L43 46M16 27L28 34L22 54M28 34L47 21" stroke="#5c7482" strokeWidth="3" strokeLinecap="round" />
+          <circle cx="26" cy="29" r="4" fill="#102332" />
           <circle cx="39" cy="31" r="4" fill="#102332" />
-          <path d="M17 56L26 47M47 56L39 47" stroke="#111820" strokeWidth="4" strokeLinecap="round" />
+          <path d="M18 53L10 61M46 53L56 60" stroke="#111820" strokeWidth="4" strokeLinecap="round" />
         </g>
       );
     case 'slowedWolf':
@@ -123,8 +125,8 @@ function MonsterShape({ id }: MonsterIconProps) {
     case 'rustChronoid':
       return (
         <g filter="url(#rustChronoid-shadow)">
-          <rect x="18" y="17" width="28" height="31" rx="7" fill="#8f7253" stroke="#111820" strokeWidth="4" />
-          <path d="M23 17V10M41 17V10M15 31H8M49 31H56" stroke="#111820" strokeWidth="4" strokeLinecap="round" />
+          <rect x="18" y="15" width="28" height="37" rx="7" fill="#8f7253" stroke="#111820" strokeWidth="4" />
+          <path d="M23 15V8M41 15V8M15 31H8M49 31H56M25 52L20 66M39 52L44 66" stroke="#111820" strokeWidth="4" strokeLinecap="round" />
           <circle cx="27" cy="31" r="4" fill="#9ceeff" />
           <circle cx="38" cy="31" r="4" fill="#1b2027" />
           <path d="M25 42H40" stroke="#4b3123" strokeWidth="4" strokeLinecap="round" />
@@ -154,8 +156,8 @@ function MonsterShape({ id }: MonsterIconProps) {
     case 'loopSoldier':
       return (
         <g filter="url(#loopSoldier-shadow)">
-          <path d="M23 56V33H41V56" fill="#374351" />
-          <path d="M23 56V33H41V56" stroke="#111820" strokeWidth="4" strokeLinejoin="round" />
+          <path d="M22 58V33H42V58L48 66M22 58L16 66" fill="#374351" />
+          <path d="M22 58V33H42V58M22 58L16 66M42 58L48 66" stroke="#111820" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
           <circle cx="32" cy="22" r="12" fill="#8f7253" stroke="#111820" strokeWidth="4" />
           <path d="M20 36L9 45M44 36L55 45" stroke="#d8b56b" strokeWidth="5" strokeLinecap="round" />
           <path d="M15 17C24 6 43 7 50 20M50 20H41M50 20V11" stroke="#7ee4ff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
@@ -164,7 +166,7 @@ function MonsterShape({ id }: MonsterIconProps) {
     case 'microRift':
       return (
         <g filter="url(#microRift-shadow)">
-          <path d="M32 7L49 24L43 56L20 51L14 23L32 7Z" fill="#281a45" stroke="#111820" strokeWidth="4" strokeLinejoin="round" />
+          <path d="M32 7L49 24L43 50L50 66L35 58L30 70L25 57L14 66L20 50L14 23L32 7Z" fill="#281a45" stroke="#111820" strokeWidth="4" strokeLinejoin="round" />
           <path d="M32 14L39 29L31 35L38 49L24 36L31 29L25 17" stroke="#75fff0" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
           <circle cx="24" cy="30" r="4" fill="#bf7cff" />
           <circle cx="41" cy="35" r="4" fill="#75fff0" />
@@ -184,7 +186,7 @@ function MonsterShape({ id }: MonsterIconProps) {
       return (
         <g filter="url(#clockhander-shadow)">
           <circle cx="32" cy="29" r="16" fill="#263540" stroke="#111820" strokeWidth="4" />
-          <path d="M23 56L27 44H37L42 56" stroke="#111820" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M25 44H39L42 58M25 44L22 58M22 58L16 66M42 58L49 66" stroke="#111820" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
           <path d="M18 42L7 28M46 42L57 25" stroke="#d8b56b" strokeWidth="5" strokeLinecap="round" />
           <path d="M7 28L18 30M57 25L54 37" stroke="#d8b56b" strokeWidth="4" strokeLinecap="round" />
           <path d="M32 19V30L41 35" stroke="#9ceeff" strokeWidth="4" strokeLinecap="round" />

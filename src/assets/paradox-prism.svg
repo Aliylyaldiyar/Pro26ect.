@@ -1,0 +1,27 @@
+<svg width="220" height="220" viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="shadow" x="-30%" y="-20%" width="160%" height="160%" color-interpolation-filters="sRGB"><feDropShadow dx="0" dy="8" stdDeviation="5" flood-color="#130515" flood-opacity="0.32"/></filter>
+    <radialGradient id="paradoxGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(110 88) rotate(90) scale(96)"><stop stop-color="#fff"/><stop offset="0.26" stop-color="#ffb9eb"/><stop offset="0.66" stop-color="#ff74d4" stop-opacity="0.42"/><stop offset="1" stop-color="#6a2b76" stop-opacity="0"/></radialGradient>
+    <linearGradient id="prism" x1="76" y1="18" x2="149" y2="154" gradientUnits="userSpaceOnUse"><stop stop-color="#fff6ff"/><stop offset="0.3" stop-color="#ffb9eb"/><stop offset="0.66" stop-color="#9f5dff"/><stop offset="1" stop-color="#241333"/></linearGradient>
+    <linearGradient id="base" x1="54" y1="142" x2="166" y2="197" gradientUnits="userSpaceOnUse"><stop stop-color="#59406f"/><stop offset="0.55" stop-color="#25182f"/><stop offset="1" stop-color="#100914"/></linearGradient>
+  </defs>
+  <ellipse cx="110" cy="190" rx="64" ry="14" fill="#130515" opacity="0.3"/>
+  <circle cx="110" cy="88" r="92" fill="url(#paradoxGlow)" opacity="0.92"/>
+  <circle cx="110" cy="88" r="64" stroke="#ff74d4" stroke-width="3" stroke-dasharray="9 8" opacity="0.72"/>
+  <path d="M45 83H76M144 83H175M64 39L85 60M136 108L158 130M158 39L136 60M85 108L64 130" stroke="#fff6ff" stroke-width="4" stroke-linecap="round" opacity="0.82"/>
+  <path d="M42 128C72 102 147 102 178 128" stroke="#ff74d4" stroke-width="4" stroke-linecap="round" opacity="0.62"/>
+  <g filter="url(#shadow)">
+    <path d="M110 16L149 68L130 151H90L71 68L110 16Z" fill="url(#prism)" stroke="#160b1f" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M110 16V151M73 68H147M89 151L110 16L131 151" stroke="#fff6ff" stroke-width="3" stroke-linecap="round" opacity="0.64"/>
+    <path d="M87 80L110 48L133 80L124 122H96L87 80Z" fill="#1a0e27" stroke="#ff74d4" stroke-width="4" stroke-linejoin="round"/>
+    <circle cx="110" cy="82" r="15" fill="#fff6ff" stroke="#9f5dff" stroke-width="4"/>
+    <path d="M110 64V76M110 90V103M92 82H103M117 82H130" stroke="#ff74d4" stroke-width="4" stroke-linecap="round"/>
+    <path d="M70 153H150L165 187H55L70 153Z" fill="url(#base)" stroke="#100914" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M50 184H170L158 199H62L50 184Z" fill="#100914"/>
+    <circle cx="81" cy="174" r="8" fill="#ffb9eb" stroke="#241333" stroke-width="3"/>
+    <circle cx="139" cy="174" r="8" fill="#9f5dff" stroke="#241333" stroke-width="3"/>
+    <path d="M79 163C96 172 124 172 141 163" stroke="#fff6ff" stroke-width="4" stroke-linecap="round" opacity="0.78"/>
+    <path d="M60 133L35 154M160 133L185 154" stroke="#241333" stroke-width="8" stroke-linecap="round"/>
+    <path d="M35 154L25 143M185 154L195 143" stroke="#ffb9eb" stroke-width="5" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, FormEvent, PointerEvent } from 'react';
+import type { CSSProperties, FormEvent, MouseEvent, PointerEvent } from 'react';
 import bossChronomancerSprite from '../assets/boss-chronomancer.svg';
 import bossEpochLordSprite from '../assets/boss-epoch-lord.svg';
 import bossMindRiftSprite from '../assets/boss-mind-rift.svg';
@@ -11,12 +11,15 @@ import epochMirrorSpriteSvg from '../assets/epoch-mirror.svg?raw';
 import gravityAnchorSpriteSvg from '../assets/gravity-anchor.svg?raw';
 import hourglassTowerSpriteSvg from '../assets/hourglass-tower.svg?raw';
 import memoryBeaconSpriteSvg from '../assets/memory-beacon.svg?raw';
+import paradoxPrismSpriteSvg from '../assets/paradox-prism.svg?raw';
 import riftBreakerSpriteSvg from '../assets/rift-breaker.svg?raw';
 import secondPulsarSpriteSvg from '../assets/second-pulsar.svg?raw';
+import singularityCoreSpriteSvg from '../assets/singularity-core.svg?raw';
 import solarObeliskSpriteSvg from '../assets/solar-obelisk.svg?raw';
 import temporalSniperSpriteSvg from '../assets/temporal-sniper.svg?raw';
 import timeScoutSpriteSvg from '../assets/time-scout.svg?raw';
 import { supabase } from '../lib/supabase';
+import { ExperienceStats } from './ExperienceStats';
 import { LanguageStartScreen } from './LanguageStartScreen';
 import type { LanguageCode } from './LanguageStartScreen';
 import { WindowTransitionSplash } from './WindowTransitionSplash';
@@ -46,7 +49,9 @@ type TowerKind = {
     | 'beacon'
     | 'archive'
     | 'sun'
-    | 'gravity';
+    | 'gravity'
+    | 'paradox'
+    | 'singularity';
   name: string;
   icon: string;
   sprite?: string;
@@ -69,6 +74,7 @@ type Difficulty = {
   startBaseHp: number;
   hpMultiplier: number;
   extraEnemies: number;
+  maxWaves: number;
 };
 
 type BossProfile = {
@@ -172,24 +178,36 @@ type BattleDecoration = LevelMapPoint & {
     | 'hut'
     | 'volcano'
     | 'rockPile'
+    | 'fossil'
+    | 'campfire'
     | 'ancientColumn'
     | 'timeTemple'
     | 'aqueduct'
+    | 'obelisk'
+    | 'market'
     | 'watchTower'
     | 'castleGate'
     | 'house'
     | 'mountain'
+    | 'banner'
+    | 'barricade'
     | 'mineCart'
     | 'pipe'
     | 'factoryBlock'
     | 'steamEngine'
     | 'gearworks'
+    | 'railSignal'
+    | 'foundry'
     | 'drone'
     | 'reactor'
     | 'energyPylon'
     | 'holoGate'
+    | 'satellite'
+    | 'skyBridge'
     | 'dataCore'
-    | 'neonSpire';
+    | 'neonSpire'
+    | 'firewall'
+    | 'glitchShard';
   spanX?: number;
   spanY?: number;
 };
@@ -223,6 +241,7 @@ type Enemy = {
   stoppedUntil: number;
   gravityUntil: number;
   isBoss: boolean;
+  isBossServant: boolean;
   monsterId: EasyMonsterId | null;
   lastHitAt: number;
   lastHitKind: TowerKind['id'] | null;
@@ -250,7 +269,7 @@ type Tower = {
   lastTargetCell: number | null;
 };
 
-type GameSound = 'enemySpawn' | 'bossSpawn' | 'arrowHit' | 'slowHit' | 'blastHit' | 'waveStart';
+type GameSound = 'enemySpawn' | 'bossSpawn' | 'arrowHit' | 'slowHit' | 'blastHit' | 'waveStart' | 'buttonHover' | 'buttonClick' | 'screenTransition' | 'menuIdle';
 
 type AiFunctionResponse = {
   text?: string;
@@ -299,6 +318,26 @@ type RetentionLeaderboardEntry = {
   total_kills: number;
 };
 
+type PlayerReviewStatus = 'new' | 'read' | 'archived';
+
+type PlayerReview = {
+  id: string;
+  user_id: string;
+  user_email: string;
+  display_name: string;
+  rating: number;
+  message: string;
+  status: PlayerReviewStatus;
+  created_at: string;
+};
+
+type ExperienceFlash = {
+  id: number;
+  gainedXp: number;
+  level: number;
+  leveledUp: boolean;
+};
+
 type DailyChallenge = {
   title: string;
   description: string;
@@ -314,8 +353,9 @@ const endlessBossInterval = 5;
 const endlessEraShiftSeconds = 8;
 const baseWaveDuration = 30;
 const skipUnlockDelay = 25;
-const requiredLoadoutSize = 3;
-const starterTowerSlots: TowerSlot[] = ['arrow', 'slow', 'hourglass', 'forge', null, null];
+const requiredLoadoutSize = 0;
+const starterTowerSlots: TowerSlot[] = ['arrow', null, null, null, null, null];
+const freeTowerIds: TowerKind['id'][] = ['arrow'];
 const minBoardZoom = 0.65;
 const maxBoardZoom = 1.18;
 const boardViewAngle = 20;
@@ -339,6 +379,9 @@ const battleMaps: BattleMapLayout[] = [
       { kind: 'hut', x: 1, y: 8, spanX: 2, spanY: 2 },
       { kind: 'volcano', x: 9, y: 6, spanX: 2, spanY: 3 },
       { kind: 'rockPile', x: 1, y: 5, spanX: 2, spanY: 2 },
+      { kind: 'fossil', x: 6, y: 7, spanX: 2, spanY: 1 },
+      { kind: 'campfire', x: 3, y: 9, spanX: 1, spanY: 1 },
+      { kind: 'rockPile', x: 9, y: 4, spanX: 1, spanY: 1 },
     ],
   },
   {
@@ -352,6 +395,9 @@ const battleMaps: BattleMapLayout[] = [
       { kind: 'ancientColumn', x: 1, y: 1, spanX: 2, spanY: 3 },
       { kind: 'timeTemple', x: 7, y: 1, spanX: 3, spanY: 3 },
       { kind: 'aqueduct', x: 7, y: 7, spanX: 3, spanY: 2 },
+      { kind: 'obelisk', x: 3, y: 6, spanX: 1, spanY: 2 },
+      { kind: 'market', x: 1, y: 7, spanX: 2, spanY: 2 },
+      { kind: 'ancientColumn', x: 9, y: 5, spanX: 1, spanY: 2 },
     ],
   },
   {
@@ -366,6 +412,9 @@ const battleMaps: BattleMapLayout[] = [
       { kind: 'watchTower', x: 1, y: 1, spanX: 2, spanY: 3 },
       { kind: 'house', x: 1, y: 8, spanX: 2, spanY: 2 },
       { kind: 'mountain', x: 6, y: 1, spanX: 3, spanY: 2 },
+      { kind: 'banner', x: 8, y: 6, spanX: 1, spanY: 2 },
+      { kind: 'barricade', x: 5, y: 8, spanX: 2, spanY: 1 },
+      { kind: 'house', x: 9, y: 4, spanX: 1, spanY: 1 },
     ],
   },
   {
@@ -381,6 +430,9 @@ const battleMaps: BattleMapLayout[] = [
       { kind: 'factoryBlock', x: 6, y: 1, spanX: 2, spanY: 2 },
       { kind: 'steamEngine', x: 2, y: 1, spanX: 2, spanY: 2 },
       { kind: 'gearworks', x: 7, y: 7, spanX: 2, spanY: 2 },
+      { kind: 'railSignal', x: 4, y: 9, spanX: 1, spanY: 1 },
+      { kind: 'foundry', x: 9, y: 8, spanX: 2, spanY: 2 },
+      { kind: 'pipe', x: 1, y: 4, spanX: 1, spanY: 2 },
     ],
   },
   {
@@ -388,13 +440,16 @@ const battleMaps: BattleMapLayout[] = [
     name: 'Разлом секунд',
     description: 'Дорога пересекает почти всё поле, а сильные позиции стоят далеко друг от друга.',
     pathCells: [10, 11, 12, 22, 32, 33, 34, 35, 25, 15, 16, 17, 27, 37, 47, 57, 56, 55, 65, 75, 76, 77, 87, 97, 98, 99],
-    buildCells: [0, 1, 2, 13, 14, 20, 21, 23, 24, 26, 31, 36, 41, 42, 43, 44, 45, 46, 52, 53, 54, 58, 59, 64, 66, 67, 74, 78, 84, 85, 86, 88, 94, 95, 96],
-    highlandCells: [14, 24, 43, 54, 67, 85, 96],
+    buildCells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 13, 14, 18, 19, 20, 21, 23, 24, 26, 28, 29, 31, 36, 38, 39, 41, 42, 43, 44, 45, 46, 48, 49, 52, 53, 54, 58, 59, 64, 66, 67, 68, 69, 74, 78, 79, 84, 85, 86, 88, 89, 94, 95, 96],
+    highlandCells: [5, 14, 24, 43, 54, 67, 69, 85, 89, 96],
     decorations: [
       { kind: 'drone', x: 9, y: 1, spanX: 2, spanY: 2 },
       { kind: 'reactor', x: 1, y: 8, spanX: 2, spanY: 2 },
       { kind: 'energyPylon', x: 9, y: 5, spanX: 2, spanY: 3 },
       { kind: 'holoGate', x: 1, y: 1, spanX: 2, spanY: 3 },
+      { kind: 'satellite', x: 4, y: 1, spanX: 2, spanY: 1 },
+      { kind: 'skyBridge', x: 4, y: 8, spanX: 3, spanY: 1 },
+      { kind: 'drone', x: 7, y: 4, spanX: 1, spanY: 1 },
     ],
   },
   {
@@ -402,13 +457,16 @@ const battleMaps: BattleMapLayout[] = [
     name: 'Финальный портал',
     description: 'Самая длинная пробежка: центр силён, но фланги легко проваливаются.',
     pathCells: [5, 15, 25, 24, 23, 22, 32, 42, 52, 53, 54, 55, 56, 46, 36, 37, 38, 48, 58, 68, 67, 66, 76, 86, 96, 97, 98, 99],
-    buildCells: [3, 4, 6, 7, 13, 14, 16, 17, 21, 26, 27, 31, 33, 34, 35, 41, 43, 44, 45, 51, 57, 61, 62, 63, 64, 65, 69, 75, 77, 85, 87, 94, 95],
-    highlandCells: [14, 34, 45, 57, 64, 77, 95],
+    buildCells: [0, 1, 2, 3, 4, 6, 7, 8, 9, 13, 14, 16, 17, 18, 19, 20, 21, 26, 27, 28, 29, 30, 31, 33, 34, 35, 39, 40, 41, 43, 44, 45, 47, 49, 50, 51, 57, 59, 60, 61, 62, 63, 64, 65, 69, 70, 71, 72, 73, 74, 75, 77, 78, 79, 80, 81, 82, 83, 84, 85, 87, 88, 89, 90, 91, 92, 93, 94, 95],
+    highlandCells: [4, 14, 18, 34, 45, 57, 64, 72, 77, 82, 95],
     decorations: [
       { kind: 'dataCore', x: 1, y: 8, spanX: 2, spanY: 2 },
       { kind: 'neonSpire', x: 9, y: 1, spanX: 2, spanY: 3 },
       { kind: 'holoGate', x: 1, y: 1, spanX: 2, spanY: 3 },
       { kind: 'energyPylon', x: 9, y: 5, spanX: 2, spanY: 3 },
+      { kind: 'firewall', x: 4, y: 7, spanX: 3, spanY: 1 },
+      { kind: 'glitchShard', x: 7, y: 2, spanX: 1, spanY: 2 },
+      { kind: 'dataCore', x: 4, y: 9, spanX: 1, spanY: 1 },
     ],
   },
 ];
@@ -535,6 +593,8 @@ const eraMissionCatalog: Record<LevelMapItem['mapArea'], EraMission[]> = {
   ],
 };
 
+const totalEraMissionCount = Object.values(eraMissionCatalog).reduce((total, missions) => total + missions.length, 0);
+
 const levelMapSize = 30;
 const levelMapPositions: Record<number, LevelMapPoint> = {
   1: { x: 4, y: 6 },
@@ -592,6 +652,7 @@ const tutorialBuildCell = 44;
 const movementThreshold = 8;
 const bossEnemyKindId: EasyMonsterId = 'tickingScarab';
 const baseLevelXp = 120;
+const adminReviewEmails = ['aliyyaldiyar@gmail.com'];
 
 const languageOptions: Array<{ code: LanguageCode; label: string }> = [
   { code: 'ru', label: 'RU' },
@@ -635,12 +696,12 @@ const uiText = {
     baseHp: 'HP базы',
     backToLevels: 'Назад к уровням',
     loadout: 'Собери Бестиарий',
-    loadoutSubtitle: 'Выбери минимум {count} башни для уровня {level}. После этого откроется поле битвы.',
+    loadoutSubtitle: 'Выбери башни для уровня {level} или сразу начни бой даже без них.',
     bestiary: 'Бестиарий',
     selected: 'выбрано',
     battleSet: 'Набор на бой',
     ready: 'готов',
-    towersNeeded: 'нужны башни',
+    towersNeeded: 'можно в бой',
     empty: 'Пусто',
     addFromBestiary: 'Добавь из Бестиария',
     backToDifficulty: 'Назад к сложности',
@@ -681,7 +742,7 @@ const uiText = {
     tutorialStepOneTitle: 'Выбери уровень',
     tutorialStepOneText: 'На карте непройденные территории бледные. После победы они получают цвет эпохи.',
     tutorialStepTwoTitle: 'Собери башни',
-    tutorialStepTwoText: 'Перед боем выбери минимум {count} башни.',
+    tutorialStepTwoText: 'Перед боем можно выбрать башни, но старт доступен даже с пустым набором.',
     tutorialStepThreeTitle: 'Ставь не на дороге',
     tutorialStepThreeText: 'Башни ставятся только на специальные клетки. Дорога нужна врагам для движения.',
     tutorialStepFourTitle: 'Улучшай защиту',
@@ -708,7 +769,7 @@ const uiText = {
     restart: 'Заново',
     mainMenu: 'В главное меню',
     victory: 'Победа',
-    victoryMessage: 'Все 40 волн пройдены. Портал времени стабилен.',
+    victoryMessage: 'Все волны пройдены. Портал времени стабилен.',
     bossWaveHint: 'Следующая волна с боссом.',
     waveSkip: 'Скип',
     launch: 'Запустить',
@@ -750,12 +811,12 @@ const uiText = {
     baseHp: 'base HP',
     backToLevels: 'Back to levels',
     loadout: 'Build Bestiary',
-    loadoutSubtitle: 'Choose at least {count} towers for {level}. Then the battlefield will open.',
+    loadoutSubtitle: 'Choose towers for {level}, or start the battle even with an empty loadout.',
     bestiary: 'Bestiary',
     selected: 'selected',
     battleSet: 'Battle loadout',
     ready: 'ready',
-    towersNeeded: 'need towers',
+    towersNeeded: 'battle allowed',
     empty: 'Empty',
     addFromBestiary: 'Add from Bestiary',
     backToDifficulty: 'Back to difficulty',
@@ -796,7 +857,7 @@ const uiText = {
     tutorialStepOneTitle: 'Choose a level',
     tutorialStepOneText: 'Unfinished territories are faded on the map. After a win, they gain the era color.',
     tutorialStepTwoTitle: 'Build a loadout',
-    tutorialStepTwoText: 'Before battle, choose at least {count} towers.',
+    tutorialStepTwoText: 'Before battle, you can choose towers, but an empty loadout can start too.',
     tutorialStepThreeTitle: 'Do not build on the road',
     tutorialStepThreeText: 'Towers can be placed only on special tiles. Enemies need the road to move.',
     tutorialStepFourTitle: 'Upgrade defense',
@@ -823,7 +884,7 @@ const uiText = {
     restart: 'Restart',
     mainMenu: 'Main menu',
     victory: 'Victory',
-    victoryMessage: 'All 40 waves are complete. The time portal is stable.',
+    victoryMessage: 'All waves are complete. The time portal is stable.',
     bossWaveHint: 'The next wave has a boss.',
     waveSkip: 'Skip',
     launch: 'Launch',
@@ -865,12 +926,12 @@ const uiText = {
     baseHp: 'база HP',
     backToLevels: 'Деңгейлерге қайту',
     loadout: 'Бестиарий жина',
-    loadoutSubtitle: '{level} үшін кемінде {count} мұнара таңда. Содан кейін шайқас алаңы ашылады.',
+    loadoutSubtitle: '{level} үшін мұнара таңда немесе бос жинақпен бірден шайқас баста.',
     bestiary: 'Бестиарий',
     selected: 'таңдалды',
     battleSet: 'Шайқас жинағы',
     ready: 'дайын',
-    towersNeeded: 'мұнара керек',
+    towersNeeded: 'шайқас болады',
     empty: 'Бос',
     addFromBestiary: 'Бестиарийден қос',
     backToDifficulty: 'Қиындыққа қайту',
@@ -911,7 +972,7 @@ const uiText = {
     tutorialStepOneTitle: 'Деңгей таңда',
     tutorialStepOneText: 'Өтілмеген аймақтар картада солғын. Жеңістен кейін олар дәуір түсін алады.',
     tutorialStepTwoTitle: 'Мұнараларды жина',
-    tutorialStepTwoText: 'Шайқас алдында кемінде {count} мұнара таңда.',
+    tutorialStepTwoText: 'Шайқас алдында мұнара таңдауға болады, бірақ бос жинақпен де бастай аласың.',
     tutorialStepThreeTitle: 'Жолға қойма',
     tutorialStepThreeText: 'Мұнаралар тек арнайы ұяшықтарға қойылады. Жол жаулардың жүруі үшін керек.',
     tutorialStepFourTitle: 'Қорғанысты жақсарт',
@@ -938,7 +999,7 @@ const uiText = {
     restart: 'Қайта бастау',
     mainMenu: 'Басты мәзір',
     victory: 'Жеңіс',
-    victoryMessage: '40 толқынның бәрі өтті. Уақыт порталы тұрақты.',
+    victoryMessage: 'Барлық толқын өтті. Уақыт порталы тұрақты.',
     bossWaveHint: 'Келесі толқында босс бар.',
     waveSkip: 'Өткізу',
     launch: 'Бастау',
@@ -1087,6 +1148,8 @@ const towerText: Record<LanguageCode, Partial<Record<TowerKind['id'], string>>> 
     archive: 'Archivist',
     sun: 'Solar Obelisk',
     gravity: 'Gravity Anchor',
+    paradox: 'Paradox Prism',
+    singularity: 'Singularity',
   },
   kk: {
     arrow: 'Уақыт барлаушысы',
@@ -1106,6 +1169,12 @@ const towerText: Record<LanguageCode, Partial<Record<TowerKind['id'], string>>> 
 
 function fillText(template: string, values: Record<string, string | number>) {
   return Object.entries(values).reduce((result, [key, value]) => result.split(`{${key}}`).join(String(value)), template);
+}
+
+function getPhoneOrientationHint(language: LanguageCode) {
+  if (language === 'en') return 'Phone tip: rotate your screen horizontally for a better battle view.';
+  if (language === 'kk') return 'Телефон кеңесі: шайқасқа ыңғайлы болу үшін экранды көлденең бұр.';
+  return 'Совет для телефона: поверни экран горизонтально, так поле и башни будут удобнее.';
 }
 
 function getLevelUiText(level: LevelMapItem, language: LanguageCode) {
@@ -1630,9 +1699,81 @@ const extraTowerKinds: TowerKind[] = [
     cooldown: 2300,
     levelDescriptions: ['Гравитационный захват: обычные враги теряют до 80% скорости, боссы до 50%.', 'Темные цепи: контроль держится дольше.', 'Якорь сингулярности: лучший контроль боссов и быстрых рывков.'],
   },
+  {
+    id: 'paradox',
+    name: 'Парадоксальная призма',
+    icon: 'X',
+    sprite: toSvgDataUri(paradoxPrismSpriteSvg),
+    cost: 620,
+    damage: 260,
+    range: 3.4,
+    cooldown: 4200,
+    elevatedOnly: true,
+    levelDescriptions: [
+      'Парадоксальный выстрел: пробивает линию времени вокруг цели и добивает слабых обычных врагов.',
+      'Двойная причинность: зона пробоя шире, а боссы получают усиленный урон.',
+      'Петля конца: редкий сверхурон по главным целям без бесплатной победы.',
+    ],
+  },
+  {
+    id: 'singularity',
+    name: 'Сингулярность',
+    icon: 'Q',
+    sprite: toSvgDataUri(singularityCoreSpriteSvg),
+    cost: 760,
+    damage: 74,
+    range: 99,
+    cooldown: 12500,
+    levelDescriptions: [
+      'Черная секунда: задевает всю карту, замедляет и кратко удерживает обычных врагов.',
+      'Горизонт событий: контроль длится дольше, а волна получает больше урона.',
+      'Точка невозврата: мощный глобальный контроль для сотых волн, но с большим кулдауном.',
+    ],
+  },
 ];
 
 const availableTowerKinds: TowerKind[] = [...towerKinds, ...extraTowerKinds];
+
+const towerMarketPrices: Record<TowerKind['id'], number> = {
+  arrow: 0,
+  slow: 20,
+  blast: 30,
+  rift: 30,
+  hourglass: 35,
+  forge: 45,
+  mirror: 45,
+  pulsar: 70,
+  beacon: 40,
+  archive: 50,
+  sun: 80,
+  gravity: 65,
+  paradox: 140,
+  singularity: 180,
+};
+
+function getTowerUnlockText(kind: TowerKind['id']) {
+  if (kind === 'paradox') {
+    return 'Откроется: пройди всю игру на Антивремени.';
+  }
+
+  if (kind === 'singularity') {
+    return 'Откроется: дойди до 100 волны в Петле времени.';
+  }
+
+  return '';
+}
+
+function isTowerUnlockedByChallenge(kind: TowerKind['id'], stats: AchievementStats, completedLevels: number) {
+  if (kind === 'paradox') {
+    return stats.antiTimeVictories >= totalEraMissionCount && completedLevels >= totalEraMissionCount;
+  }
+
+  if (kind === 'singularity') {
+    return stats.maxWaveReached >= 100;
+  }
+
+  return true;
+}
 
 const targetPriorityOptions: { id: TargetPriority; name: string; description: string }[] = [
   { id: 'first', name: 'Первый', description: 'Атакует врага ближе всего к порталу' },
@@ -1649,6 +1790,7 @@ const difficultyModes: Difficulty[] = [
     startBaseHp: 150,
     hpMultiplier: 0.85,
     extraEnemies: 0,
+    maxWaves: 27,
   },
   {
     id: 'experienced',
@@ -1658,6 +1800,7 @@ const difficultyModes: Difficulty[] = [
     startBaseHp: 125,
     hpMultiplier: 1,
     extraEnemies: 0,
+    maxWaves: 33,
   },
   {
     id: 'hard',
@@ -1667,6 +1810,7 @@ const difficultyModes: Difficulty[] = [
     startBaseHp: 100,
     hpMultiplier: 1.22,
     extraEnemies: 1,
+    maxWaves: 40,
   },
   {
     id: 'antiTime',
@@ -1676,6 +1820,7 @@ const difficultyModes: Difficulty[] = [
     startBaseHp: 80,
     hpMultiplier: 1.45,
     extraEnemies: 2,
+    maxWaves: 48,
   },
 ];
 
@@ -1786,16 +1931,20 @@ function getWaveThreatDescriptions(wave: number, difficultyData: Difficulty, gam
 
   const descriptions = Array.from(waveKinds).map((kind) => getEnemyKind(kind).ability);
 
-  if (isBossWave(wave, gameMode)) {
+  if (isBossWave(wave, gameMode, difficultyData.maxWaves)) {
     descriptions.push('оглушает башни, ускоряет угрозы рядом и становится быстрее при низком здоровье');
   }
 
   return descriptions;
 }
 
-function getFallbackWaveCommentary(wave: number, isBoss: boolean) {
+function getFallbackWaveCommentary(wave: number, isBoss: boolean, isServant = false) {
   if (isBoss) {
     return `Комментатор: Волна ${wave}: держи запас прочности, темп может резко сломаться ближе к финалу.`;
+  }
+
+  if (isServant) {
+    return `Комментатор: Волна ${wave}: это не финальный босс, а его служащий. Чем ближе финал, тем тяжелее такие приспешники.`;
   }
 
   return `Комментатор: Волна ${wave}: смотри не только на урон, но и на скорость, сопротивления и странные рывки.`;
@@ -1833,6 +1982,7 @@ function createEnemy(kindId: EasyMonsterId, wave: number, difficultyData: Diffic
     stoppedUntil: 0,
     gravityUntil: 0,
     isBoss: false,
+    isBossServant: false,
     monsterId: kindId,
     lastHitAt: 0,
     lastHitKind: null,
@@ -1850,7 +2000,24 @@ function createBossEnemy(wave: number, difficultyData: Difficulty, idSeed: numbe
     speed: 3,
     reward: 500,
     isBoss: true,
+    isBossServant: false,
     monsterId: null,
+  };
+}
+
+function createBossServantEnemy(wave: number, difficultyData: Difficulty, idSeed: number, now: number, progressRatio: number): Enemy {
+  const servantKinds: EasyMonsterId[] = ['brokenCourier', 'tickingScarab', 'shardRunner', 'slowedWolf'];
+  const kindId = servantKinds[(wave + Math.floor(progressRatio * 10)) % servantKinds.length];
+  const hpScale = 2.2 + progressRatio * 3.2 + difficultyData.extraEnemies * 0.25;
+  const servant = createEnemy(kindId, wave, difficultyData, idSeed, now, hpScale);
+  const rewardScale = 2.4 + progressRatio * 2.2;
+
+  return {
+    ...servant,
+    speed: Math.max(1.4, servant.speed * (0.82 + progressRatio * 0.18)),
+    reward: Math.round(servant.reward * rewardScale),
+    isBossServant: true,
+    lastAbilityAt: now - 2500,
   };
 }
 
@@ -1916,8 +2083,8 @@ function getTileDetailClass(cell: number, activeMap: BattleMapLayout = battleMap
   return cell % 5 === 0 ? 'terrain-grass' : 'terrain-soft';
 }
 
-function getWaveDuration(wave: number, gameMode: GameMode = 'campaign') {
-  if (isBossWave(wave, gameMode)) return gameMode === 'timeLoop' ? 90 : 120;
+function getWaveDuration(wave: number, gameMode: GameMode = 'campaign', campaignMaxWaves = maxWaves) {
+  if (isBossWave(wave, gameMode, campaignMaxWaves)) return gameMode === 'timeLoop' ? 90 : 120;
   return baseWaveDuration + Math.min(20, wave * 3);
 }
 
@@ -2053,8 +2220,13 @@ function chooseTowerTarget(tower: Tower, enemies: Enemy[], range: number, active
 }
 
 function getTowerSplashTargets(tower: Tower, target: Enemy, enemies: Enemy[], activePathCells = pathCells) {
-  if (tower.kind === 'pulsar') {
+  if (tower.kind === 'pulsar' || tower.kind === 'singularity') {
     return enemies;
+  }
+
+  if (tower.kind === 'paradox') {
+    const lineReach = 4 + tower.level;
+    return enemies.filter((enemy) => Math.abs(enemy.step - target.step) <= lineReach);
   }
 
   if (tower.kind === 'rift') {
@@ -2077,8 +2249,18 @@ function getTowerSplashTargets(tower: Tower, target: Enemy, enemies: Enemy[], ac
   return [target];
 }
 
-function isBossWave(wave: number, gameMode: GameMode = 'campaign') {
-  return gameMode === 'timeLoop' ? wave > 0 && wave % endlessBossInterval === 0 : wave === maxWaves;
+function getBossServantWaveNumbers(campaignMaxWaves: number) {
+  return Array.from(new Set([Math.max(2, Math.round(campaignMaxWaves / 3)), Math.max(3, Math.round((campaignMaxWaves * 2) / 3)), campaignMaxWaves]));
+}
+
+function isBossWave(wave: number, gameMode: GameMode = 'campaign', campaignMaxWaves = maxWaves, finalBossAllowed = true) {
+  return gameMode === 'timeLoop' ? wave > 0 && wave % endlessBossInterval === 0 : finalBossAllowed && wave === campaignMaxWaves;
+}
+
+function isBossServantWave(wave: number, gameMode: GameMode = 'campaign', campaignMaxWaves = maxWaves, finalBossAllowed = true) {
+  if (gameMode === 'timeLoop') return false;
+  if (finalBossAllowed && wave === campaignMaxWaves) return false;
+  return getBossServantWaveNumbers(campaignMaxWaves).includes(wave);
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -2302,6 +2484,32 @@ function playGameSound(audioContext: AudioContext, sound: GameSound) {
   if (sound === 'blastHit') {
     playTone(audioContext, 118, now, 0.14, 0.045, 'sawtooth');
     playTone(audioContext, 74, now + 0.045, 0.16, 0.03, 'square');
+    return;
+  }
+
+  if (sound === 'buttonHover') {
+    playTone(audioContext, 520, now, 0.045, 0.012, 'sine');
+    playTone(audioContext, 780, now + 0.022, 0.04, 0.008, 'triangle');
+    return;
+  }
+
+  if (sound === 'buttonClick') {
+    playTone(audioContext, 260, now, 0.055, 0.026, 'triangle');
+    playTone(audioContext, 620, now + 0.04, 0.075, 0.018, 'sine');
+    return;
+  }
+
+  if (sound === 'screenTransition') {
+    playTone(audioContext, 146.83, now, 0.16, 0.032, 'sine');
+    playTone(audioContext, 220, now + 0.06, 0.18, 0.024, 'triangle');
+    playTone(audioContext, 440, now + 0.14, 0.16, 0.018, 'sine');
+    return;
+  }
+
+  if (sound === 'menuIdle') {
+    playTone(audioContext, 82.41, now, 0.9, 0.018, 'sine');
+    playTone(audioContext, 164.81, now + 0.12, 0.72, 0.012, 'triangle');
+    playTone(audioContext, 246.94, now + 0.38, 0.62, 0.009, 'sine');
     return;
   }
 
@@ -2554,11 +2762,18 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     refreshRetentionForToday({ ...emptyRetentionProfile, user_id: userId ?? '', display_name: userEmail || 'Игрок' }),
   );
   const [leaderboard, setLeaderboard] = useState<RetentionLeaderboardEntry[]>([]);
+  const [reviews, setReviews] = useState<PlayerReview[]>([]);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewMessage, setReviewMessage] = useState('');
+  const [reviewStatusMessage, setReviewStatusMessage] = useState('');
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [experienceFlash, setExperienceFlash] = useState<ExperienceFlash | null>(null);
   const [retentionLoading, setRetentionLoading] = useState(Boolean(userId));
   const [selectedLevelId, setSelectedLevelId] = useState(1);
   const [selectedEraMissionId, setSelectedEraMissionId] = useState(1);
   const [difficulty, setDifficulty] = useState<Difficulty['id']>('easy');
   const selectedDifficultyData = difficultyModes.find((mode) => mode.id === difficulty) ?? difficultyModes[0];
+  const selectedMaxWaves = selectedDifficultyData.maxWaves;
   const selectedBossProfile = bossProfiles[difficulty];
   const isTimeLoopMode = gameMode === 'timeLoop';
   const [eraIndex, setEraIndex] = useState(0);
@@ -2567,6 +2782,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const [baseHp, setBaseHp] = useState(selectedDifficultyData.startBaseHp);
   const [selectedTower, setSelectedTower] = useState<TowerKind['id']>('arrow');
   const [towerSlots, setTowerSlots] = useState<TowerSlot[]>(starterTowerSlots);
+  const [unlockedTowerIds, setUnlockedTowerIds] = useState<TowerKind['id'][]>(freeTowerIds);
   const [selectedTowerId, setSelectedTowerId] = useState<number | null>(null);
   const [towers, setTowers] = useState<Tower[]>([]);
   const [enemies, setEnemies] = useState<Enemy[]>([]);
@@ -2584,9 +2800,12 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const boardRef = useRef<HTMLDivElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const backgroundMusicRef = useRef<BackgroundMusicEngine | null>(null);
+  const lastButtonHoverSoundRef = useRef(0);
+  const menuIdleTimerRef = useRef<number | null>(null);
   const windowTransitionTimersRef = useRef<number[]>([]);
   const commentatorRequestRef = useRef(0);
   const runChallengeRef = useRef({ tookDamage: false, skippedWave: false });
+  const previousXpRef = useRef(retentionProfile.xp);
   const cameraDragRef = useRef({
     active: false,
     hasMoved: false,
@@ -2600,13 +2819,16 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const era = eras[eraIndex];
   const selectedTowerData = getTowerKind(selectedTower);
   const equippedTowerIds = towerSlots.filter((slot): slot is TowerKind['id'] => slot !== null);
+  const unlockedTowerSet = useMemo(() => new Set<TowerKind['id']>(unlockedTowerIds), [unlockedTowerIds]);
   const isSelectedTowerEquipped = equippedTowerIds.includes(selectedTower);
-  const isLoadoutReady = equippedTowerIds.length >= Math.min(requiredLoadoutSize, availableTowerKinds.length);
+  const minLoadoutSize = Math.min(requiredLoadoutSize, availableTowerKinds.length);
+  const isLoadoutReady = equippedTowerIds.length >= minLoadoutSize;
   const selectedPlacedTower = towers.find((tower) => tower.id === selectedTowerId) ?? null;
   const selectedLevel = levelMap.find((level) => level.id === selectedLevelId) ?? levelMap[0];
   const selectedEraMissions = eraMissionCatalog[selectedLevel.mapArea];
   const selectedEraMission = selectedEraMissions.find((mission) => mission.id === selectedEraMissionId) ?? selectedEraMissions[0];
-  const selectedMissionStartWave = isTimeLoopMode ? 1 : Math.min(maxWaves, selectedLevel.startWave + selectedEraMission.startWaveOffset);
+  const isFinalCampaignMission = selectedLevel.id === levelMap[levelMap.length - 1].id && selectedEraMission.id === selectedEraMissions[selectedEraMissions.length - 1].id;
+  const selectedMissionStartWave = isTimeLoopMode ? 1 : Math.min(selectedMaxWaves, selectedLevel.startWave + selectedEraMission.startWaveOffset);
   const selectedProgressLevelId = selectedLevel.id * 10 + selectedEraMission.id;
   const selectedBattleMap = useMemo(
     () => getMissionBattleMap(selectedLevel, selectedEraMission, language),
@@ -2621,9 +2843,11 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     }),
     [selectedBattleMap],
   );
-  const enemiesInCurrentWave = 5 + Math.ceil(wave * 1.45) + selectedDifficultyData.extraEnemies + (isBossWave(wave, gameMode) ? 1 : 0);
-  const waveElapsedSeconds = Math.max(0, getWaveDuration(wave, gameMode) - waveTimeLeft);
-  const waveLimitLabel = isTimeLoopMode ? '∞' : String(maxWaves);
+  const hasFinalBossInCurrentWave = isBossWave(wave, gameMode, selectedMaxWaves, isTimeLoopMode || isFinalCampaignMission);
+  const hasBossServantInCurrentWave = isBossServantWave(wave, gameMode, selectedMaxWaves, isFinalCampaignMission);
+  const enemiesInCurrentWave = 5 + Math.ceil(wave * 1.45) + selectedDifficultyData.extraEnemies + (hasFinalBossInCurrentWave || hasBossServantInCurrentWave ? 1 : 0);
+  const waveElapsedSeconds = Math.max(0, getWaveDuration(wave, gameMode, selectedMaxWaves) - waveTimeLeft);
+  const waveLimitLabel = isTimeLoopMode ? '∞' : String(selectedMaxWaves);
   const skipSecondsLeft = Math.max(0, skipUnlockDelay - waveElapsedSeconds);
   const canSkipWave = isWaveRunning && skipSecondsLeft === 0 && baseHp > 0 && !isVictory;
   const t = uiText[language];
@@ -2631,6 +2855,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const selectedMissionTitle = selectedEraMission.title[language];
   const epochTablet = epochTabletText[language];
   const playerLabel = playerName.trim() || retentionProfile.display_name || userEmail || t.guest;
+  const isReviewAdmin = adminReviewEmails.includes(userEmail.toLowerCase());
   const completedAchievements = achievements.filter(
     (achievement) => getAchievementProgress(achievement, achievementStats, completedLevelIds.length) >= achievement.goal,
   ).length;
@@ -2688,6 +2913,37 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     const audioContext = getAudioContext();
     startBackgroundMusic();
     playGameSound(audioContext, sound);
+  }
+
+  function playButtonHoverSound() {
+    const now = Date.now();
+    if (now - lastButtonHoverSoundRef.current < 90) return;
+
+    lastButtonHoverSoundRef.current = now;
+    playSound('buttonHover');
+  }
+
+  function playButtonClickSound() {
+    playSound('buttonClick');
+  }
+
+  function handleUiPointerOver(event: PointerEvent<HTMLElement>) {
+    if (event.pointerType !== 'mouse') return;
+
+    const targetButton = event.target instanceof HTMLElement ? event.target.closest<HTMLButtonElement>('button') : null;
+    if (!targetButton || targetButton.disabled) return;
+
+    const previousTarget = event.relatedTarget instanceof HTMLElement ? event.relatedTarget : null;
+    if (previousTarget && targetButton.contains(previousTarget)) return;
+
+    playButtonHoverSound();
+  }
+
+  function handleUiClick(event: MouseEvent<HTMLElement>) {
+    const targetButton = event.target instanceof HTMLElement ? event.target.closest<HTMLButtonElement>('button') : null;
+    if (!targetButton || targetButton.disabled) return;
+
+    playButtonClickSound();
   }
 
   function applyTimedChallengeRewards(profile: RetentionProfile) {
@@ -2791,6 +3047,86 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     );
   }
 
+  function isPlayerReview(row: unknown): row is PlayerReview {
+    if (!row || typeof row !== 'object') return false;
+    const review = row as Partial<PlayerReview>;
+    return (
+      typeof review.id === 'string' &&
+      typeof review.user_id === 'string' &&
+      typeof review.user_email === 'string' &&
+      typeof review.display_name === 'string' &&
+      typeof review.rating === 'number' &&
+      typeof review.message === 'string' &&
+      (review.status === 'new' || review.status === 'read' || review.status === 'archived') &&
+      typeof review.created_at === 'string'
+    );
+  }
+
+  async function refreshReviews() {
+    if (!supabase || !userId) {
+      setReviews([]);
+      return;
+    }
+
+    setReviewsLoading(true);
+    const { data, error } = await supabase
+      .from('player_reviews')
+      .select('id,user_id,user_email,display_name,rating,message,status,created_at')
+      .order('created_at', { ascending: false })
+      .limit(isReviewAdmin ? 50 : 5);
+
+    if (!error && Array.isArray(data)) {
+      setReviews(data.filter(isPlayerReview));
+    }
+
+    setReviewsLoading(false);
+  }
+
+  async function submitReview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!supabase || !userId) {
+      setReviewStatusMessage('Войди в аккаунт, чтобы отзыв сохранился в Supabase.');
+      return;
+    }
+
+    const cleanMessage = reviewMessage.trim();
+    if (cleanMessage.length < 3) {
+      setReviewStatusMessage('Напиши отзыв хотя бы из 3 символов.');
+      return;
+    }
+
+    const { error } = await supabase.from('player_reviews').insert({
+      user_id: userId,
+      user_email: userEmail,
+      display_name: playerLabel,
+      rating: reviewRating,
+      message: cleanMessage,
+    });
+
+    if (error) {
+      setReviewStatusMessage('Не получилось сохранить отзыв. Проверь, применена ли миграция базы.');
+      return;
+    }
+
+    setReviewMessage('');
+    setReviewRating(5);
+    setReviewStatusMessage('Спасибо! Отзыв сохранен.');
+    await refreshReviews();
+  }
+
+  async function updateReviewStatus(reviewId: string, status: PlayerReviewStatus) {
+    if (!supabase || !isReviewAdmin) return;
+
+    const { error } = await supabase.from('player_reviews').update({ status }).eq('id', reviewId);
+    if (error) {
+      setReviewStatusMessage('Не получилось обновить статус отзыва.');
+      return;
+    }
+
+    setReviews((current) => current.map((review) => (review.id === reviewId ? { ...review, status } : review)));
+  }
+
   const enemiesByCell = useMemo(() => {
     const map = new Map<number, Enemy[]>();
     enemies.forEach((enemy) => {
@@ -2845,6 +3181,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         savedName && (!data?.display_name || data.display_name === 'Игрок')
           ? { ...profile, display_name: savedName }
           : profile;
+      previousXpRef.current = profileWithSavedName.xp;
       setRetentionProfile(profileWithSavedName);
       setCompletedLevelIds(profileWithSavedName.completed_level_ids);
       setAchievementStats(profileWithSavedName.achievement_stats);
@@ -2877,6 +3214,55 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     document.documentElement.lang = language;
   }, [language]);
 
+  useEffect(() => {
+    const previousXp = previousXpRef.current;
+
+    if (retentionProfile.xp > previousXp) {
+      const previousLevel = getLevelFromXp(previousXp);
+      const nextLevel = getLevelFromXp(retentionProfile.xp);
+
+      setExperienceFlash({
+        id: Date.now(),
+        gainedXp: retentionProfile.xp - previousXp,
+        level: nextLevel,
+        leveledUp: nextLevel > previousLevel,
+      });
+    }
+
+    previousXpRef.current = retentionProfile.xp;
+  }, [retentionProfile.xp]);
+
+  useEffect(() => {
+    if (!experienceFlash) return;
+
+    const timer = window.setTimeout(() => {
+      setExperienceFlash((current) => (current?.id === experienceFlash.id ? null : current));
+    }, 2600);
+
+    return () => window.clearTimeout(timer);
+  }, [experienceFlash]);
+
+  useEffect(() => {
+    if (menuIdleTimerRef.current) {
+      window.clearInterval(menuIdleTimerRef.current);
+      menuIdleTimerRef.current = null;
+    }
+
+    if (screen !== 'start' || !backgroundMusicRef.current) return;
+
+    const timer = window.setInterval(() => {
+      playSound('menuIdle');
+    }, 6400);
+
+    menuIdleTimerRef.current = timer;
+    return () => {
+      window.clearInterval(timer);
+      if (menuIdleTimerRef.current === timer) {
+        menuIdleTimerRef.current = null;
+      }
+    };
+  }, [screen]);
+
   function clearWindowTransitionTimers() {
     windowTransitionTimersRef.current.forEach((timer) => window.clearTimeout(timer));
     windowTransitionTimersRef.current = [];
@@ -2889,6 +3275,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     }
 
     clearWindowTransitionTimers();
+    playSound('screenTransition');
     setScreen('transition');
 
     const openTimer = window.setTimeout(() => {
@@ -2911,6 +3298,12 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
     return () => window.clearTimeout(timer);
   }, [retentionLoading, retentionProfile, userId]);
+
+  useEffect(() => {
+    if (screen !== 'settings') return;
+
+    void refreshReviews();
+  }, [isReviewAdmin, screen, userId]);
 
   useEffect(() => {
     if (screen !== 'battle') return;
@@ -2939,9 +3332,9 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         setIsWaveRunning(false);
         setEnemies([]);
         setSpawnedCount(0);
-        if (!isTimeLoopMode && wave >= maxWaves) {
+        if (!isTimeLoopMode && wave >= selectedMaxWaves) {
           setIsVictory(true);
-          setMessage('Победа! Ты удержал линию времени все 40 волн.');
+          setMessage(`Победа! Ты удержал линию времени все ${selectedMaxWaves} волн.`);
           return 0;
         }
 
@@ -2949,7 +3342,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         const refund = getLandscapeRefund(towers);
         setTowers([]);
         setSelectedTowerId(null);
-        setWave((currentWave) => (isTimeLoopMode ? currentWave + 1 : Math.min(maxWaves, currentWave + 1)));
+        setWave((currentWave) => (isTimeLoopMode ? currentWave + 1 : Math.min(selectedMaxWaves, currentWave + 1)));
         setEraIndex((currentEra) => (currentEra + 1) % eras.length);
         if (isTimeLoopMode) {
           setSelectedLevelId((currentLevelId) => (currentLevelId % levelMap.length) + 1);
@@ -2962,7 +3355,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [isTimeLoopMode, isWaveRunning, towers, wave]);
+  }, [isTimeLoopMode, isWaveRunning, selectedMaxWaves, towers, wave]);
 
   useEffect(() => {
     if (!isWaveRunning) return;
@@ -2971,27 +3364,31 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       const regularEnemies = 5 + Math.ceil(wave * 1.45) + selectedDifficultyData.extraEnemies;
       const spawnTimer = window.setInterval(() => {
         spawned += 1;
-        const boss = isBossWave(wave, gameMode) && spawned > regularEnemies;
+        const boss = hasFinalBossInCurrentWave && spawned > regularEnemies;
+        const servant = hasBossServantInCurrentWave && spawned > regularEnemies;
         const now = Date.now();
-        const kindId = boss ? bossEnemyKindId : chooseEnemyKind(wave, spawned);
-        const groupSize = !boss && kindId === 'sandPincers' ? 5 : 1;
+        const kindId = boss || servant ? bossEnemyKindId : chooseEnemyKind(wave, spawned);
+        const groupSize = !boss && !servant && kindId === 'sandPincers' ? 5 : 1;
+        const servantProgress = Math.min(1, wave / selectedMaxWaves);
         const spawnedEnemies = Array.from({ length: groupSize }, (_, index) =>
           boss
             ? createBossEnemy(wave, selectedDifficultyData, now + spawned + index, now)
+            : servant
+              ? createBossServantEnemy(wave, selectedDifficultyData, now + spawned + index, now, servantProgress)
             : createEnemy(kindId, wave, selectedDifficultyData, now + spawned + index, now),
         );
 
-      playSound(boss ? 'bossSpawn' : 'enemySpawn');
+      playSound(boss || servant ? 'bossSpawn' : 'enemySpawn');
       setSpawnedCount((current) => current + spawnedEnemies.length);
       setEnemies((current) => [...current, ...spawnedEnemies]);
 
-      if (spawned >= regularEnemies + (isBossWave(wave, gameMode) ? 1 : 0)) {
+      if (spawned >= regularEnemies + (hasFinalBossInCurrentWave || hasBossServantInCurrentWave ? 1 : 0)) {
         window.clearInterval(spawnTimer);
       }
     }, 780);
 
     return () => window.clearInterval(spawnTimer);
-  }, [difficulty, gameMode, isWaveRunning, selectedDifficultyData.extraEnemies, selectedDifficultyData.hpMultiplier, wave]);
+  }, [difficulty, gameMode, hasBossServantInCurrentWave, hasFinalBossInCurrentWave, isWaveRunning, selectedDifficultyData.extraEnemies, selectedDifficultyData.hpMultiplier, selectedMaxWaves, wave]);
 
   useEffect(() => {
     if (!isWaveRunning) return;
@@ -3039,6 +3436,17 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
             };
           }
 
+          if (enemy.isBossServant && now - enemy.lastAbilityAt >= 10500) {
+            const abilityIndex = Math.floor((now - enemy.createdAt) / 10500) % 2;
+            nextEnemy = {
+              ...nextEnemy,
+              hp: abilityIndex === 0 ? Math.min(nextEnemy.maxHp, nextEnemy.hp + Math.round(nextEnemy.maxHp * 0.08)) : nextEnemy.hp,
+              speedBoostUntil: abilityIndex === 1 ? now + 1800 : nextEnemy.speedBoostUntil,
+              towerSlowUntil: abilityIndex === 0 ? now + 1200 : nextEnemy.towerSlowUntil,
+              lastAbilityAt: now,
+            };
+          }
+
           const moveCharge = nextEnemy.moveCharge + getEnemySpeed(nextEnemy, now);
           const stepsToMove = Math.floor(moveCharge / movementThreshold);
           return {
@@ -3069,21 +3477,49 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           const nextAttackCount = tower.attackCount + 1;
           const splashTargets = getTowerSplashTargets(tower, target, nextEnemies, selectedBattleMap.pathCells);
           const splashTargetIds = new Set(splashTargets.map((enemy) => enemy.id));
-          playSound(stats.id === 'arrow' ? 'arrowHit' : stats.id === 'hourglass' || stats.id === 'gravity' ? 'slowHit' : 'blastHit');
+          playSound(
+            stats.id === 'arrow'
+              ? 'arrowHit'
+              : stats.id === 'hourglass' || stats.id === 'gravity' || stats.id === 'singularity'
+                ? 'slowHit'
+                : 'blastHit',
+          );
           nextEnemies = nextEnemies.map((enemy) => {
             if (!splashTargetIds.has(enemy.id)) return enemy;
             const isImmune = isEnemyInvulnerable(enemy, now) && stats.id !== 'beacon';
-            const splashMultiplier = enemy.id === target.id ? 1 : stats.id === 'sun' ? 0.48 : stats.id === 'mirror' ? 0.5 : 0.68;
+            const splashMultiplier =
+              enemy.id === target.id
+                ? 1
+                : stats.id === 'sun'
+                  ? 0.48
+                  : stats.id === 'mirror'
+                    ? 0.5
+                    : stats.id === 'singularity'
+                      ? 0.42
+                      : stats.id === 'paradox'
+                        ? 0.72
+                        : 0.68;
             const baseDamage =
               stats.id === 'mirror'
                 ? getMirrorCopiedDamage(tower, towers)
                 : stats.id === 'blast' && enemy.isBoss
                   ? Math.round(stats.damage * 1.3)
+                  : stats.id === 'paradox' && enemy.isBoss
+                    ? Math.round(stats.damage * (1.15 + tower.level * 0.08))
                   : stats.damage;
             const boostedDamage = Math.round(baseDamage * getTowerDamageMultiplier(tower, towers));
-            const damage = isImmune ? 0 : getDamageAfterResistance(enemy, stats.id, Math.round(boostedDamage * splashMultiplier));
+            const rawDamage = Math.round(boostedDamage * splashMultiplier);
+            const damage = isImmune ? 0 : getDamageAfterResistance(enemy, stats.id, rawDamage);
+            const paradoxExecuteThreshold = 0.16 + tower.level * 0.03;
+            const canParadoxExecute =
+              stats.id === 'paradox' &&
+              !enemy.isBoss &&
+              !isImmune &&
+              enemy.hp / enemy.maxHp <= paradoxExecuteThreshold &&
+              damage > 0;
+            const finalDamage = canParadoxExecute ? enemy.hp : damage;
             const scoutSlow = stats.id === 'arrow' && nextAttackCount % 5 === 0;
-            const canSlow = (scoutSlow || stats.id === 'hourglass' || stats.id === 'rift' || stats.id === 'gravity') && !isImmune;
+            const canSlow = (scoutSlow || stats.id === 'hourglass' || stats.id === 'rift' || stats.id === 'gravity' || stats.id === 'singularity') && !isImmune;
             const ignoresSlow = canSlow && enemy.kind === 'brokenCourier' && !enemy.ignoredFirstSlow;
             const slowDuration =
               scoutSlow
@@ -3092,20 +3528,28 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                 ? 2100 + tower.level * 320
                 : stats.id === 'gravity'
                   ? 1800 + tower.level * 280
+                  : stats.id === 'singularity'
+                    ? 2600 + tower.level * 360
                   : 1700 + tower.level * 260;
             const slowUntil = canSlow && !ignoresSlow ? now + slowDuration : enemy.slowedUntil;
-            const gravityUntil = stats.id === 'gravity' && !isImmune && !ignoresSlow ? now + 1900 + tower.level * 300 : enemy.gravityUntil;
+            const gravityUntil =
+              (stats.id === 'gravity' || stats.id === 'singularity') && !isImmune && !ignoresSlow
+                ? now + (stats.id === 'singularity' ? 2400 + tower.level * 340 : 1900 + tower.level * 300)
+                : enemy.gravityUntil;
             return {
               ...enemy,
-              hp: enemy.hp - damage,
+              hp: enemy.hp - finalDamage,
               slowedUntil: scoutSlow ? enemy.slowedUntil : slowUntil,
               lightSlowUntil: scoutSlow && !ignoresSlow ? now + slowDuration : enemy.lightSlowUntil,
-              stoppedUntil: stats.id === 'rift' && !isImmune && !ignoresSlow ? now + 360 + tower.level * 140 : enemy.stoppedUntil,
+              stoppedUntil:
+                (stats.id === 'rift' || (stats.id === 'singularity' && !enemy.isBoss)) && !isImmune && !ignoresSlow
+                  ? now + (stats.id === 'singularity' ? 520 + tower.level * 120 : 360 + tower.level * 140)
+                  : enemy.stoppedUntil,
               gravityUntil,
               ignoredFirstSlow: enemy.ignoredFirstSlow || ignoresSlow,
               lastHitAt: now,
               lastHitKind: stats.id,
-              lastDamage: damage,
+              lastDamage: finalDamage,
             };
           });
 
@@ -3149,7 +3593,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
             return false;
           }
           if (enemy.step >= selectedBattleMap.pathCells.length - 1) {
-            escapedDamage += enemy.isBoss ? baseHp : Math.max(1, Math.ceil(enemy.hp / 35));
+            escapedDamage += enemy.isBoss ? baseHp : enemy.isBossServant ? Math.max(8, Math.ceil(enemy.hp / 24)) : Math.max(1, Math.ceil(enemy.hp / 35));
             return false;
           }
           return true;
@@ -3171,7 +3615,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           completedWaveCount += 1;
           setIsWaveRunning(false);
           setWaveTimeLeft(0);
-          if (!isTimeLoopMode && wave >= maxWaves) {
+          if (!isTimeLoopMode && wave >= selectedMaxWaves) {
             setIsVictory(true);
             setMessage('Победа! Ты отбил финальную волну и спас портал времени.');
             setCoins((current) => current + 80 + coinsEarned);
@@ -3182,7 +3626,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           const refund = getLandscapeRefund(towers);
           nextTowers = [];
           setSelectedTowerId(null);
-          setWave((current) => (isTimeLoopMode ? current + 1 : Math.min(maxWaves, current + 1)));
+          setWave((current) => (isTimeLoopMode ? current + 1 : Math.min(selectedMaxWaves, current + 1)));
           setEraIndex((current) => (current + 1) % eras.length);
           if (isTimeLoopMode) {
             setSelectedLevelId((currentLevelId) => (currentLevelId % levelMap.length) + 1);
@@ -3233,7 +3677,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     }, 650);
 
     return () => window.clearInterval(battleTimer);
-  }, [baseHp, enemiesInCurrentWave, isTimeLoopMode, isWaveRunning, practiceTutorialActive, selectedBattleMap.pathCells, spawnedCount, towers, tutorialStep, wave]);
+  }, [baseHp, enemiesInCurrentWave, isTimeLoopMode, isWaveRunning, practiceTutorialActive, selectedBattleMap.pathCells, selectedMaxWaves, spawnedCount, towers, tutorialStep, wave]);
 
   useEffect(() => {
     if (!isTimeLoopMode || !isWaveRunning || screen !== 'battle') return;
@@ -3396,6 +3840,24 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   }
 
   function addTowerToSlot(kind: TowerKind['id']) {
+    if (!isTowerUnlockedByChallenge(kind, achievementStats, completedLevelIds.length)) {
+      setMessage(getTowerUnlockText(kind));
+      return;
+    }
+
+    if (!unlockedTowerSet.has(kind)) {
+      const marketPrice = towerMarketPrices[kind];
+
+      if (coins < marketPrice) {
+        setMessage(`Для покупки ${getTowerKind(kind).name} нужно ${marketPrice} монет.`);
+        return;
+      }
+
+      setCoins((current) => current - marketPrice);
+      setUnlockedTowerIds((current) => (current.includes(kind) ? current : [...current, kind]));
+      setMessage(`${getTowerKind(kind).name} куплен на рынке за ${marketPrice} монет.`);
+    }
+
     if (towerSlots.includes(kind)) {
       setSelectedTower(kind);
       setMessage(`${getTowerKind(kind).name} уже есть в слотах.`);
@@ -3549,7 +4011,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     setEnemies([]);
     setSpawnedCount(0);
     setIsWaveRunning(false);
-    setWaveTimeLeft(getWaveDuration(startWaveNumber, nextGameMode));
+    setWaveTimeLeft(getWaveDuration(startWaveNumber, nextGameMode, mode.maxWaves));
     setCommentatorMessage('');
     runChallengeRef.current = { tookDamage: false, skippedWave: false };
     setGameStartedAt(null);
@@ -3558,9 +4020,12 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
   function selectDifficulty(mode: Difficulty) {
     if (isWaveRunning) return;
+    const modeStartWave = isTimeLoopMode ? 1 : Math.min(mode.maxWaves, selectedLevel.startWave + selectedEraMission.startWaveOffset);
     setDifficulty(mode.id);
-    resetGame(mode, selectedMissionStartWave, gameMode);
+    resetGame(mode, modeStartWave, gameMode);
     setTowerSlots(starterTowerSlots);
+    setUnlockedTowerIds(freeTowerIds);
+    setSelectedTower('arrow');
     openScreenWithTransition('loadout');
     setMessage(`${selectedLevel.title}. Карта: ${selectedBattleMap.name}. ${mode.name}: собери набор башен перед входом в бой.`);
   }
@@ -3591,6 +4056,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     setSelectedEraMissionId(1);
     resetGame(selectedDifficultyData, 1, 'timeLoop');
     setTowerSlots(starterTowerSlots);
+    setUnlockedTowerIds(freeTowerIds);
+    setSelectedTower('arrow');
     openScreenWithTransition('loadout');
     setCommentatorMessage('');
     setMessage('Петля времени: собери набор башен. После старта эпохи будут прыгать прямо во время боя.');
@@ -3618,11 +4085,13 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     setMessage(`${mission.title[language]}: ${mission.description[language]}`);
   }
 
-  async function requestWaveCommentary(waveNumber: number, eraName: string, difficultyData: Difficulty) {
+  async function requestWaveCommentary(waveNumber: number, eraName: string, difficultyData: Difficulty, finalBossAllowed: boolean) {
     const requestId = commentatorRequestRef.current + 1;
     commentatorRequestRef.current = requestId;
 
-    const fallback = getFallbackWaveCommentary(waveNumber, isBossWave(waveNumber, gameMode));
+    const finalBossWave = isBossWave(waveNumber, gameMode, difficultyData.maxWaves, finalBossAllowed);
+    const servantWave = isBossServantWave(waveNumber, gameMode, difficultyData.maxWaves, finalBossAllowed);
+    const fallback = getFallbackWaveCommentary(waveNumber, finalBossWave, servantWave);
     setCommentatorMessage('Комментатор: анализирую искажения волны...');
 
     if (!supabase) {
@@ -3635,6 +4104,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       `Волна: ${waveNumber}.`,
       `Эпоха: ${eraName}.`,
       `Сложность: ${difficultyData.name}.`,
+      finalBossWave ? 'Это настоящий финальный босс сложности.' : '',
+      servantWave ? 'Это не финальный босс, а сильный служащий босса.' : '',
       'Способности угроз, без названий:',
       ...threatDescriptions.map((description, index) => `${index + 1}. ${description}`),
       'Сделай полезный намек игроку. Не раскрывай, кто именно придет.',
@@ -3660,7 +4131,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   }
 
   function startWave() {
-    if (isWaveRunning || baseHp === 0 || isVictory || (!isTimeLoopMode && wave > maxWaves)) return;
+    if (isWaveRunning || baseHp === 0 || isVictory || (!isTimeLoopMode && wave > selectedMaxWaves)) return;
     activateAudio();
     if (practiceTutorialActive && tutorialStep !== 'startWave') {
       setMessage('Сначала поставь башню на подсвеченную платформу.');
@@ -3676,7 +4147,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     setSelectedTowerId(null);
     setEnemies([]);
     setSpawnedCount(0);
-    setWaveTimeLeft(getWaveDuration(wave, gameMode));
+    setWaveTimeLeft(getWaveDuration(wave, gameMode, selectedMaxWaves));
     playSound('waveStart');
     setIsWaveRunning(true);
     setAchievementStats((current) => ({ ...current, maxWaveReached: Math.max(current.maxWaveReached, wave) }));
@@ -3692,10 +4163,12 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       return;
     }
 
-    void requestWaveCommentary(wave, era.name, selectedDifficultyData);
+    void requestWaveCommentary(wave, era.name, selectedDifficultyData, isTimeLoopMode || isFinalCampaignMission);
     setMessage(
-      isBossWave(wave, gameMode)
+      hasFinalBossInCurrentWave
         ? `Волна ${wave}: временной босс идет через ${era.name.toLowerCase()}. Режим: ${selectedDifficultyData.name}.`
+        : hasBossServantInCurrentWave
+          ? `Волна ${wave}: служащий финального босса идет через ${era.name.toLowerCase()}. Чем ближе финал, тем он сильнее.`
         : `Волна ${wave} идет через ${era.name.toLowerCase()}. Режим: ${selectedDifficultyData.name}.`,
     );
   }
@@ -3705,7 +4178,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
     runChallengeRef.current.skippedWave = true;
     const nextWave = wave + 1;
-    if (!isTimeLoopMode && nextWave > maxWaves) {
+    if (!isTimeLoopMode && nextWave > selectedMaxWaves) {
       setEnemies([]);
       setSpawnedCount(0);
       setIsWaveRunning(false);
@@ -3727,7 +4200,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       setSelectedLevelId((currentLevelId) => (currentLevelId % levelMap.length) + 1);
       setSelectedEraMissionId((currentMissionId) => (currentMissionId % 5) + 1);
     }
-    setWaveTimeLeft(getWaveDuration(nextWave, gameMode));
+    setWaveTimeLeft(getWaveDuration(nextWave, gameMode, selectedMaxWaves));
     setCoins((current) => current + 10 + refund);
     setMessage(`Ландшафт изменился. Башни разобраны, возвращено ${refund} монет.`);
     setMessage(`Волна пропущена. Сразу идет волна ${nextWave}.`);
@@ -3748,7 +4221,12 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
   function startCameraDrag(event: PointerEvent<HTMLDivElement>) {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
-    if (event.target instanceof HTMLElement && event.target.closest('.tile')) return;
+    const tile = event.target instanceof HTMLElement ? event.target.closest<HTMLButtonElement>('.tile') : null;
+
+    if (tile?.dataset.buildCell === 'true') {
+      cameraDragRef.current = { ...cameraDragRef.current, active: false, hasMoved: false };
+      return;
+    }
 
     cameraDragRef.current = {
       active: true,
@@ -3775,6 +4253,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       drag.hasMoved = true;
     }
 
+    event.preventDefault();
     setBoardTurn(drag.startTurn + deltaX * 0.3);
     setBoardTilt(clamp(drag.startTilt + deltaY * 0.16, minBoardTilt, maxBoardTilt));
   }
@@ -3845,12 +4324,16 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           </div>
         </div>
 
-        <div className="xp-track" aria-label={fillText(t.xpToNext, { level: retentionLevel + 1, xp: Math.max(0, nextLevelXp - retentionProfile.xp) })}>
-          <span style={{ width: `${Math.max(3, Math.min(100, levelProgressPercent))}%` }} />
-        </div>
-        <p className="xp-caption">
-          {fillText(t.xpToNext, { level: retentionLevel + 1, xp: Math.max(0, nextLevelXp - retentionProfile.xp) })}
-        </p>
+        <ExperienceStats
+          level={retentionLevel}
+          xp={retentionProfile.xp}
+          currentLevelXp={currentLevelXp}
+          nextLevelXp={nextLevelXp}
+          progressPercent={levelProgressPercent}
+          xpToNextText={fillText(t.xpToNext, { level: retentionLevel + 1, xp: Math.max(0, nextLevelXp - retentionProfile.xp) })}
+          levelLabel={t.level}
+          flash={experienceFlash}
+        />
 
         <div className="challenge-list">
           {timedChallenges.map((item) => {
@@ -3893,6 +4376,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     <section
       className={`game-shell ${screen === 'battle' && baseHp === 0 ? 'defeat-state' : ''}`}
       style={{ '--era': era.accent } as CSSProperties}
+      onPointerOver={handleUiPointerOver}
+      onClickCapture={handleUiClick}
     >
       <div className="time-atmosphere" aria-hidden="true">
         <span className="broken-clock shell-clock-main" />
@@ -3929,6 +4414,12 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           <button className="secondary" type="button" onClick={restartGame}>
             {t.retry}
           </button>
+        </div>
+      )}
+
+      {screen === 'battle' && (
+        <div className="phone-orientation-tip" role="status">
+          {getPhoneOrientationHint(language)}
         </div>
       )}
 
@@ -4175,6 +4666,68 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
               </button>
             ))}
           </div>
+          <form className="review-panel" onSubmit={submitReview}>
+            <div className="review-heading">
+              <strong>Отзывы</strong>
+              <span>{isReviewAdmin ? 'админский просмотр включен' : 'помоги улучшить игру'}</span>
+            </div>
+            <label>
+              Оценка
+              <select value={reviewRating} onChange={(event) => setReviewRating(Number(event.target.value))}>
+                <option value={5}>5 - отлично</option>
+                <option value={4}>4 - хорошо</option>
+                <option value={3}>3 - нормально</option>
+                <option value={2}>2 - надо доработать</option>
+                <option value={1}>1 - плохо</option>
+              </select>
+            </label>
+            <label>
+              Твой отзыв
+              <textarea
+                value={reviewMessage}
+                onChange={(event) => setReviewMessage(event.target.value)}
+                placeholder={userId ? 'Что понравилось? Что улучшить?' : 'Войди в аккаунт, чтобы отправить отзыв'}
+                maxLength={1200}
+                disabled={!userId}
+              />
+            </label>
+            <button type="submit" disabled={!userId || reviewMessage.trim().length < 3}>
+              Отправить отзыв
+            </button>
+            {reviewStatusMessage && <p>{reviewStatusMessage}</p>}
+          </form>
+          <div className="review-list-panel">
+            <div className="review-heading">
+              <strong>{isReviewAdmin ? 'Все отзывы игроков' : 'Мои последние отзывы'}</strong>
+              <span>{reviewsLoading ? 'загрузка...' : `${reviews.length} шт.`}</span>
+            </div>
+            {reviews.length === 0 ? (
+              <p className="review-empty">{userId ? 'Отзывов пока нет.' : 'Отзывы доступны после входа.'}</p>
+            ) : (
+              <div className="review-list">
+                {reviews.map((review) => (
+                  <article className={`review-card status-${review.status}`} key={review.id}>
+                    <div>
+                      <strong>{review.rating}/5 · {review.display_name}</strong>
+                      <span>{isReviewAdmin ? review.user_email : new Date(review.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <p>{review.message}</p>
+                    <small>{review.status}</small>
+                    {isReviewAdmin && (
+                      <div className="review-admin-actions">
+                        <button type="button" onClick={() => updateReviewStatus(review.id, 'read')}>
+                          Прочитано
+                        </button>
+                        <button type="button" onClick={() => updateReviewStatus(review.id, 'archived')}>
+                          В архив
+                        </button>
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="menu-actions">
             <button
               type="button"
@@ -4287,8 +4840,10 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
             ? `${era.description} Петля времени нестабильна: эпохи меняются прямо во время боя.`
             : isVictory
             ? t.victoryMessage
-            : isBossWave(wave, gameMode)
+            : hasFinalBossInCurrentWave
               ? `${era.description} ${t.bossWaveHint}`
+              : hasBossServantInCurrentWave
+                ? `${era.description} На этой волне выходит служащий финального босса.`
               : era.description}
         </p>
         <button
@@ -4322,7 +4877,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
               </div>
               <div className="tablet-level-grid">
                 {selectedEraMissions.map((mission) => {
-                  const startWave = Math.min(maxWaves, selectedLevel.startWave + mission.startWaveOffset);
+                  const startWave = Math.min(selectedMaxWaves, selectedLevel.startWave + mission.startWaveOffset);
 
                   return (
                     <button
@@ -4335,7 +4890,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                       <strong>{mission.title[language]}</strong>
                       <p>{mission.description[language]}</p>
                       <small><b>{epochTablet.map}</b>{mission.mapHint[language]}</small>
-                      <small><b>{epochTablet.waves}</b>{startWave}-{maxWaves}</small>
+                      <small><b>{epochTablet.waves}</b>{startWave}-{selectedMaxWaves}</small>
                       <em>{epochTablet.choose}</em>
                     </button>
                   );
@@ -4363,6 +4918,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         {difficultyModes.map((mode) => {
           const modeText = getDifficultyUiText(mode, language);
           const modeMetaText = difficultyMetaText[language];
+          const modeStartWave = isTimeLoopMode ? 1 : Math.min(mode.maxWaves, selectedLevel.startWave + selectedEraMission.startWaveOffset);
 
           return (
             <button
@@ -4381,7 +4937,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
               </span>
               <span className="difficulty-meta">
                 <small><b>{modeMetaText.boss}</b>{modeText.boss}</small>
-                <small><b>{modeMetaText.waves}</b>{selectedMissionStartWave}-{maxWaves}</small>
+                <small><b>{modeMetaText.waves}</b>{modeStartWave}-{mode.maxWaves}</small>
                 <small><b>{modeMetaText.levels}</b>{selectedEraMissions.length}</small>
               </span>
               <small>
@@ -4412,22 +4968,40 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
             <div className="loadout-bestiary" aria-label={t.bestiary}>
               <div className="loadout-panel-heading">
                 <strong>{t.bestiary}</strong>
-                <span>{equippedTowerIds.length}/{Math.min(requiredLoadoutSize, availableTowerKinds.length)} {t.selected}</span>
+                <span>{coins} {t.coins} · {equippedTowerIds.length}/{towerSlots.length} {t.selected}</span>
               </div>
               <div className="bestiary-list loadout-bestiary-list">
-                {availableTowerKinds.map((tower) => (
+                {availableTowerKinds.map((tower) => {
+                  const isUnlocked = unlockedTowerSet.has(tower.id);
+                  const isEquipped = towerSlots.includes(tower.id);
+                  const canUnlockByChallenge = isTowerUnlockedByChallenge(tower.id, achievementStats, completedLevelIds.length);
+
+                  return (
                   <button
                     key={tower.id}
-                    className={towerSlots.includes(tower.id) ? 'bestiary-item equipped' : 'bestiary-item'}
+                    className={[
+                      'bestiary-item',
+                      isEquipped ? 'equipped' : '',
+                      isUnlocked ? 'unlocked' : 'locked',
+                      canUnlockByChallenge ? '' : 'challenge-locked',
+                    ].join(' ')}
                     type="button"
                     onClick={() => addTowerToSlot(tower.id)}
                     title={tower.levelDescriptions[0]}
                   >
                     <span>{renderTowerMark(tower)}</span>
                     <em>{getTowerUiName(tower, language)}</em>
+                    <small className="market-price">
+                      {isUnlocked
+                        ? 'Куплено'
+                        : canUnlockByChallenge
+                          ? `Купить за ${towerMarketPrices[tower.id]} ${t.coins}`
+                          : getTowerUnlockText(tower.id)}
+                    </small>
                     <small>{tower.cost} {t.coins} · DPS {getDps(tower.damage, tower.cooldown)} · {getPlacementUiLabel(tower, language)}</small>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -4674,6 +5248,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                 isTutorialTarget ? 'tutorial-target' : '',
               ].join(' ')}
               type="button"
+              data-cell={cell}
+              data-build-cell={canBuild || tower ? 'true' : 'false'}
               onClick={() => handleCellClick(cell)}
               disabled={!tower && (!canBuild || !canPlaceSelectedTower)}
               aria-label={canBuild ? 'Поставить или улучшить башню' : 'Клетка пути'}
@@ -4697,6 +5273,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                     'enemy',
                     'time-distorted',
                     enemy.isBoss ? 'boss' : '',
+                    enemy.isBossServant ? 'boss-servant' : '',
                     enemy.slowedUntil > renderNow ? 'slowed' : '',
                     enemy.speedBoostUntil > renderNow ? 'boosted' : '',
                     isEnemyInvulnerable(enemy, renderNow) ? 'invulnerable' : '',
@@ -4739,7 +5316,15 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       </div>
 
       <p className="message">{message}</p>
-      {commentatorMessage && <p className="ai-commentary">{commentatorMessage}</p>}
+      {commentatorMessage && (
+        <div className="ai-commentary">
+          <span className="commentator-portrait" aria-hidden="true">
+            <span className="commentator-head" />
+            <span className="commentator-body" />
+          </span>
+          <p>{commentatorMessage}</p>
+        </div>
+      )}
       {baseHp === 0 && (
         <div className="defeat-overlay" role="dialog" aria-modal="true" aria-labelledby="defeat-title">
           <span className="defeat-rift rift-left" aria-hidden="true" />
