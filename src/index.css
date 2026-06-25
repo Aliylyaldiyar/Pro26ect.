@@ -6096,7 +6096,11 @@ input {
   font-size: clamp(12px, 2.6vw, 20px);
   font-weight: 900;
   filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.22));
-  transform: translate(-50%, -50%) rotateX(var(--board-tilt-inverse)) rotateZ(var(--board-turn-inverse)) translateY(-10px);
+  transform:
+    translate(calc(-50% + var(--enemy-x, 0%)), calc(-50% + var(--enemy-y, -12%)))
+    rotateX(var(--board-tilt-inverse))
+    rotateZ(var(--board-turn-inverse))
+    scale(var(--enemy-scale, 1));
   animation: time-warp 1.45s ease-in-out infinite;
 }
 
@@ -6334,7 +6338,11 @@ input {
   filter:
     drop-shadow(0 12px 22px rgba(0, 0, 0, 0.34))
     drop-shadow(0 0 18px color-mix(in srgb, var(--era) 54%, transparent));
-  transform: translate(-50%, -50%) rotateX(var(--board-tilt-inverse)) rotateZ(var(--board-turn-inverse)) translateY(-18px);
+  transform:
+    translate(calc(-50% + var(--enemy-x, 0%)), calc(-50% + var(--enemy-y, -18%)))
+    rotateX(var(--board-tilt-inverse))
+    rotateZ(var(--board-turn-inverse))
+    scale(var(--enemy-scale, 1));
 }
 
 .enemy.boss::before {
@@ -6461,6 +6469,13 @@ input {
   border-radius: 999px;
   background: linear-gradient(90deg, #68b36f, #d6e86a);
   box-shadow: 0 0 8px rgba(84, 157, 91, 0.6);
+}
+
+.enemy.crowded .enemy-health {
+  left: 18%;
+  bottom: -3px;
+  height: 3px;
+  max-width: 64%;
 }
 
 .actions {

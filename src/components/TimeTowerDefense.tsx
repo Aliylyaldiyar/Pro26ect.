@@ -96,6 +96,7 @@ type GameScreen =
   | 'levels'
   | 'epochLevels'
   | 'difficulty'
+  | 'market'
   | 'loadout'
   | 'encyclopedia'
   | 'achievements'
@@ -378,11 +379,20 @@ const skipUnlockDelay = 25;
 const requiredLoadoutSize = 0;
 const starterTowerSlots: TowerSlot[] = ['arrow', null, null, null, null, null];
 const freeTowerIds: TowerKind['id'][] = ['arrow'];
+const initialMarketCoins = 125;
 const minBoardZoom = 0.65;
 const maxBoardZoom = 1.18;
 const boardViewAngle = 20;
 const minBoardTilt = 12;
 const maxBoardTilt = 62;
+const enemyCrowdOffsets = [
+  { x: 0, y: -12, scale: 1 },
+  { x: -24, y: 6, scale: 0.78 },
+  { x: 24, y: 6, scale: 0.78 },
+  { x: -14, y: -28, scale: 0.72 },
+  { x: 14, y: -28, scale: 0.72 },
+  { x: 0, y: 20, scale: 0.7 },
+];
 const cameraDragThreshold = 8;
 const pathCells = [0, 1, 2, 3, 13, 23, 33, 34, 35, 45, 55, 65, 64, 63, 73, 83, 84, 85, 86, 96, 97, 98, 99];
 const buildCells = [11, 12, 14, 21, 22, 24, 31, 32, 36, 37, 42, 43, 44, 46, 47, 54, 56, 57, 62, 66, 67, 72, 74, 75, 82, 87, 88, 92, 93, 94, 95];
@@ -712,6 +722,8 @@ const performanceModeStorageKey = 'chrono-defense-performance-mode';
 const retentionProfileStorageKey = 'chrono-defense-retention-profile';
 const encyclopediaTowerStorageKey = 'chrono-defense-encyclopedia-towers';
 const encyclopediaEnemyStorageKey = 'chrono-defense-encyclopedia-enemies';
+const unlockedTowerStorageKey = 'chrono-defense-unlocked-towers';
+const marketCoinsStorageKey = 'chrono-defense-market-coins';
 const tutorialBuildCell = 44;
 const movementThreshold = 8;
 const bossEnemyKindId: EasyMonsterId = 'tickingScarab';
@@ -2196,6 +2208,44 @@ function chooseEnemyKind(wave: number, spawnIndex: number) {
   return pool[(spawnIndex + wave) % pool.length];
 }
 
+function getRegularEnemySpawnCount(wave: number, difficultyData: Difficulty, isSecretWave: boolean) {
+  return isSecretWave ? 9 + Math.ceil(wave * 1.1) : 5 + Math.ceil(wave * 1.45) + difficultyData.extraEnemies;
+}
+
+function getSpawnGroupSize(kind: EasyMonsterId, isBoss: boolean, isBossServant: boolean) {
+  return !isBoss && !isBossServant && kind === 'sandPincers' ? 5 : 1;
+}
+
+function getExpectedWaveEnemyCount(
+  wave: number,
+  difficultyData: Difficulty,
+  isSecretWave: boolean,
+  hasBoss: boolean,
+  hasBossServant: boolean,
+) {
+  const regularEnemies = getRegularEnemySpawnCount(wave, difficultyData, isSecretWave);
+  const totalSpawnTicks = regularEnemies + (hasBoss || hasBossServant ? 1 : 0);
+  let totalEnemies = 0;
+
+  for (let spawnIndex = 1; spawnIndex <= totalSpawnTicks; spawnIndex += 1) {
+    const isBossSpawn = !isSecretWave && hasBoss && spawnIndex > regularEnemies;
+    const isServantSpawn = !isSecretWave && hasBossServant && spawnIndex > regularEnemies;
+    const kind = isSecretWave
+      ? secretWaveKinds[(spawnIndex + wave) % secretWaveKinds.length]
+      : isBossSpawn || isServantSpawn
+        ? bossEnemyKindId
+        : chooseEnemyKind(wave, spawnIndex);
+
+    totalEnemies += getSpawnGroupSize(kind, isBossSpawn, isServantSpawn);
+  }
+
+  return totalEnemies;
+}
+
+function getMarketWaveReward(wave: number, isFinalWave: boolean) {
+  return 10 + Math.min(30, Math.ceil(wave * 1.2)) + (isFinalWave ? 35 : 0);
+}
+
 function getWaveHpMultiplier(wave: number) {
   return 0.72 + wave * 0.075;
 }
@@ -3188,6 +3238,14 @@ function readSavedStringArray(storageKey: string, fallback: string[] = []) {
   }
 }
 
+function readSavedNumber(storageKey: string, fallback: number) {
+  const savedValue = window.localStorage.getItem(storageKey);
+  if (savedValue === null) return fallback;
+
+  const parsedValue = Number(savedValue);
+  return Number.isFinite(parsedValue) ? parsedValue : fallback;
+}
+
 function savePlayerName(name: string) {
   const cleanName = name.trim();
   if (cleanName) {
@@ -3240,10 +3298,15 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const [eraIndex, setEraIndex] = useState(0);
   const [wave, setWave] = useState(1);
   const [coins, setCoins] = useState(selectedDifficultyData.startCoins);
+  const [marketCoins, setMarketCoins] = useState(() => readSavedNumber(marketCoinsStorageKey, initialMarketCoins));
   const [baseHp, setBaseHp] = useState(selectedDifficultyData.startBaseHp);
   const [selectedTower, setSelectedTower] = useState<TowerKind['id']>('arrow');
   const [towerSlots, setTowerSlots] = useState<TowerSlot[]>(starterTowerSlots);
-  const [unlockedTowerIds, setUnlockedTowerIds] = useState<TowerKind['id'][]>(freeTowerIds);
+  const [unlockedTowerIds, setUnlockedTowerIds] = useState<TowerKind['id'][]>(() => {
+    const savedIds = readSavedStringArray(unlockedTowerStorageKey);
+    const validSavedIds = savedIds.filter((id): id is TowerKind['id'] => availableTowerKinds.some((tower) => tower.id === id));
+    return Array.from(new Set([...freeTowerIds, ...validSavedIds]));
+  });
   const [selectedTowerId, setSelectedTowerId] = useState<number | null>(null);
   const [towers, setTowers] = useState<Tower[]>([]);
   const [enemies, setEnemies] = useState<Enemy[]>([]);
@@ -3327,8 +3390,13 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   );
   const hasFinalBossInCurrentWave = !isSecretWaveActive && isBossWave(wave, gameMode, selectedMaxWaves, isTimeLoopMode || isFinalCampaignMission);
   const hasBossServantInCurrentWave = !isSecretWaveActive && isBossServantWave(wave, gameMode, selectedMaxWaves, isFinalCampaignMission);
-  const regularEnemiesInCurrentWave = isSecretWaveActive ? 9 + Math.ceil(wave * 1.1) : 5 + Math.ceil(wave * 1.45) + selectedDifficultyData.extraEnemies;
-  const enemiesInCurrentWave = regularEnemiesInCurrentWave + (hasFinalBossInCurrentWave || hasBossServantInCurrentWave ? 1 : 0);
+  const enemiesInCurrentWave = getExpectedWaveEnemyCount(
+    wave,
+    selectedDifficultyData,
+    isSecretWaveActive,
+    hasFinalBossInCurrentWave,
+    hasBossServantInCurrentWave,
+  );
   const currentWaveDuration = isSecretWaveActive ? secretWaveDuration : getWaveDuration(wave, gameMode, selectedMaxWaves);
   const waveElapsedSeconds = Math.max(0, currentWaveDuration - waveTimeLeft);
   const waveLimitLabel = isTimeLoopMode ? '∞' : String(selectedMaxWaves);
@@ -3794,6 +3862,14 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   }, [discoveredEnemyIds]);
 
   useEffect(() => {
+    window.localStorage.setItem(unlockedTowerStorageKey, JSON.stringify(unlockedTowerIds));
+  }, [unlockedTowerIds]);
+
+  useEffect(() => {
+    window.localStorage.setItem(marketCoinsStorageKey, String(marketCoins));
+  }, [marketCoins]);
+
+  useEffect(() => {
     window.localStorage.setItem(retentionProfileStorageKey, JSON.stringify(retentionProfile));
   }, [retentionProfile]);
 
@@ -3928,12 +4004,38 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
     const timer = window.setInterval(() => {
       setWaveTimeLeft((current) => {
+        if (current <= 0) return current;
         if (current > 1) return current - 1;
 
         setIsWaveRunning(false);
         setIsSecretWaveActive(false);
         setEnemies([]);
         setSpawnedCount(0);
+        const timedWaveXp = 30 + getArchiveXpBonus(towers);
+        const timedMarketReward = getMarketWaveReward(wave, !isTimeLoopMode && wave >= selectedMaxWaves);
+        setBattleSummary((currentSummary) => ({
+          ...currentSummary,
+          waves: currentSummary.waves + 1,
+          xp: currentSummary.xp + timedWaveXp,
+        }));
+        setAchievementStats((currentStats) => ({
+          ...currentStats,
+          wavesCompleted: currentStats.wavesCompleted + 1,
+        }));
+        updateRetentionProfile((currentProfile) => ({
+          ...currentProfile,
+          xp: currentProfile.xp + timedWaveXp,
+          daily_waves: currentProfile.daily_waves + 1,
+          weekly_waves: currentProfile.weekly_waves + 1,
+          monthly_waves: currentProfile.monthly_waves + 1,
+        }));
+        setMarketCoins((currentCoins) => currentCoins + timedMarketReward);
+        if (practiceTutorialActive && tutorialStep === 'watchWave') {
+          setPracticeTutorialActive(false);
+          setTutorialStep('complete');
+          window.localStorage.setItem(tutorialSeenStorageKey, 'true');
+          setTutorialSeen(true);
+        }
         if (!isTimeLoopMode && wave >= selectedMaxWaves) {
           setIsVictory(true);
           setMessage(`Победа! Ты удержал линию времени все ${selectedMaxWaves} волн.`);
@@ -3952,6 +4054,9 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           setSelectedEraMissionId((currentMissionId) => (currentMissionId % 5) + 1);
         }
         setCoins((currentCoins) => currentCoins + selectedDifficultyData.waveClearBonus + refund + killBonus);
+        if (!practiceTutorialActive && wave % relicWaveInterval === 0) {
+          setPendingRelicChoices(getRelicChoicesForWave(wave));
+        }
         waveKillCoinsRef.current = 0;
         setMessage(`Пересборка: башни исчезли. Возврат ${refund} монет + бонус за убийства ${killBonus}.`);
         return 0;
@@ -3959,20 +4064,20 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [isTimeLoopMode, isWaveRunning, selectedDifficultyData.waveClearBonus, selectedMaxWaves, towers, wave]);
+  }, [isTimeLoopMode, isWaveRunning, practiceTutorialActive, selectedDifficultyData.waveClearBonus, selectedMaxWaves, towers, tutorialStep, wave]);
 
   useEffect(() => {
     if (!isWaveRunning) return;
 
     let spawned = 0;
-      const regularEnemies = isSecretWaveActive ? 9 + Math.ceil(wave * 1.1) : 5 + Math.ceil(wave * 1.45) + selectedDifficultyData.extraEnemies;
+      const regularEnemies = getRegularEnemySpawnCount(wave, selectedDifficultyData, isSecretWaveActive);
       const spawnTimer = window.setInterval(() => {
         spawned += 1;
         const boss = !isSecretWaveActive && hasFinalBossInCurrentWave && spawned > regularEnemies;
         const servant = !isSecretWaveActive && hasBossServantInCurrentWave && spawned > regularEnemies;
         const now = Date.now();
         const kindId = isSecretWaveActive ? secretWaveKinds[(spawned + wave) % secretWaveKinds.length] : boss || servant ? bossEnemyKindId : chooseEnemyKind(wave, spawned);
-        const groupSize = !boss && !servant && kindId === 'sandPincers' ? 5 : 1;
+        const groupSize = getSpawnGroupSize(kindId, boss, servant);
         const servantProgress = Math.min(1, wave / selectedMaxWaves);
         const spawnedEnemies = Array.from({ length: groupSize }, (_, index) =>
           boss
@@ -4241,6 +4346,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
             setIsVictory(true);
             setMessage('Победа! Ты отбил финальную волну и спас портал времени.');
             setCoins((current) => current + selectedDifficultyData.waveClearBonus * 2 + coinsEarned);
+            setMarketCoins((current) => current + getMarketWaveReward(wave, true));
             return aliveEnemies;
           }
 
@@ -4256,6 +4362,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
             setSelectedEraMissionId((currentMissionId) => (currentMissionId % 5) + 1);
           }
           setCoins((current) => current + selectedDifficultyData.waveClearBonus + coinsEarned + refund + killBonus);
+          setMarketCoins((current) => current + getMarketWaveReward(wave, false));
           waveKillCoinsRef.current = 0;
           if (!practiceTutorialActive && wave % relicWaveInterval === 0) {
             setPendingRelicChoices(getRelicChoicesForWave(wave));
@@ -4510,7 +4617,6 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     setDifficulty(demoDifficulty.id);
     resetGame(demoDifficulty, demoLevel.startWave, 'campaign');
     setTowerSlots(starterTowerSlots);
-    setUnlockedTowerIds(freeTowerIds);
     setSelectedTower('arrow');
     setPracticeTutorialActive(false);
     setTutorialStep('selectTower');
@@ -4521,6 +4627,30 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     setMessage('Демо-бой готов: поставь стрелковую башню на платформу и запусти волну.');
   }
 
+  function buyTowerFromMarket(kind: TowerKind['id']) {
+    if (!isTowerUnlockedByChallenge(kind, achievementStats, completedLevelIds.length)) {
+      setMessage(getTowerUnlockText(kind));
+      return;
+    }
+
+    if (unlockedTowerSet.has(kind)) {
+      setMessage(`${getTowerKind(kind).name} уже куплен.`);
+      return;
+    }
+
+    const marketPrice = towerMarketPrices[kind];
+
+    if (marketCoins < marketPrice) {
+      setMessage(`${getTowerKind(kind).name}: нужно ${marketPrice} рыночных монет.`);
+      return;
+    }
+
+    setMarketCoins((current) => current - marketPrice);
+    setUnlockedTowerIds((current) => (current.includes(kind) ? current : [...current, kind]));
+    discoverTower(kind);
+    setMessage(`${getTowerKind(kind).name} куплен за ${marketPrice} рыночных монет.`);
+  }
+
   function addTowerToSlot(kind: TowerKind['id']) {
     if (!isTowerUnlockedByChallenge(kind, achievementStats, completedLevelIds.length)) {
       setMessage(getTowerUnlockText(kind));
@@ -4528,16 +4658,9 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     }
 
     if (!unlockedTowerSet.has(kind)) {
-      const marketPrice = towerMarketPrices[kind];
-
-      if (coins < marketPrice) {
-        setMessage(`Для покупки ${getTowerKind(kind).name} нужно ${marketPrice} монет.`);
-        return;
-      }
-
-      setCoins((current) => current - marketPrice);
-      setUnlockedTowerIds((current) => (current.includes(kind) ? current : [...current, kind]));
-      setMessage(`${getTowerKind(kind).name} куплен на рынке за ${marketPrice} монет.`);
+      setMessage(`${getTowerKind(kind).name} сначала нужно купить на рынке башен.`);
+      openScreenWithTransition('market');
+      return;
     }
 
     discoverTower(kind);
@@ -4718,7 +4841,6 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     setDifficulty(mode.id);
     resetGame(mode, modeStartWave, gameMode);
     setTowerSlots(starterTowerSlots);
-    setUnlockedTowerIds(freeTowerIds);
     setSelectedTower('arrow');
     openScreenWithTransition('loadout');
     setMessage(`${selectedLevel.title}. Карта: ${selectedBattleMap.name}. ${mode.name}: собери набор башен перед входом в бой.`);
@@ -4750,7 +4872,6 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     setSelectedEraMissionId(1);
     resetGame(selectedDifficultyData, 1, 'timeLoop');
     setTowerSlots(starterTowerSlots);
-    setUnlockedTowerIds(freeTowerIds);
     setSelectedTower('arrow');
     openScreenWithTransition('loadout');
     setCommentatorMessage('');
@@ -4918,6 +5039,26 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
     runChallengeRef.current.skippedWave = true;
     const nextWave = wave + 1;
+    const skippedWaveXp = 18 + getArchiveXpBonus(towers);
+    const skippedMarketReward = Math.ceil(getMarketWaveReward(wave, !isTimeLoopMode && nextWave > selectedMaxWaves) * 0.5);
+    setBattleSummary((current) => ({
+      ...current,
+      waves: current.waves + 1,
+      xp: current.xp + skippedWaveXp,
+    }));
+    setAchievementStats((current) => ({
+      ...current,
+      wavesCompleted: current.wavesCompleted + 1,
+    }));
+    updateRetentionProfile((current) => ({
+      ...current,
+      xp: current.xp + skippedWaveXp,
+      daily_waves: current.daily_waves + 1,
+      weekly_waves: current.weekly_waves + 1,
+      monthly_waves: current.monthly_waves + 1,
+    }));
+    setMarketCoins((current) => current + skippedMarketReward);
+
     if (!isTimeLoopMode && nextWave > selectedMaxWaves) {
       setEnemies([]);
       setSpawnedCount(0);
@@ -5841,6 +5982,61 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         </section>
       )}
 
+      {screen === 'market' && (
+        <section className="loadout-screen">
+          <span className="broken-clock screen-clock loadout-clock" aria-hidden="true" />
+          <span className="time-crack screen-crack loadout-crack" aria-hidden="true" />
+          <div className="screen-heading">
+            <h3>Рынок башен</h3>
+            <p>Покупай башни за рыночные монеты. Боевые монеты для карты битвы не тратятся.</p>
+          </div>
+
+          <div className="loadout-layout market-layout">
+            <div className="loadout-bestiary market-panel" aria-label="Рынок башен">
+              <div className="loadout-panel-heading">
+                <strong>Доступные башни</strong>
+                <span>{marketCoins} рыночных монет</span>
+              </div>
+              <div className="bestiary-list loadout-bestiary-list market-list">
+                {availableTowerKinds.map((tower) => {
+                  const isUnlocked = unlockedTowerSet.has(tower.id);
+                  const canUnlockByChallenge = isTowerUnlockedByChallenge(tower.id, achievementStats, completedLevelIds.length);
+                  const marketPrice = towerMarketPrices[tower.id];
+
+                  return (
+                    <button
+                      key={tower.id}
+                      className={[
+                        'bestiary-item',
+                        isUnlocked ? 'unlocked' : 'locked',
+                        canUnlockByChallenge ? '' : 'challenge-locked',
+                      ].join(' ')}
+                      type="button"
+                      onClick={() => buyTowerFromMarket(tower.id)}
+                      disabled={isUnlocked}
+                      title={tower.levelDescriptions[0]}
+                    >
+                      <span>{renderTowerMark(tower)}</span>
+                      <em>{getTowerUiName(tower, language)}</em>
+                      <small className="market-price">
+                        {isUnlocked ? 'Куплено' : canUnlockByChallenge ? `${marketPrice} рыночных монет` : getTowerUnlockText(tower.id)}
+                      </small>
+                      <small>{tower.cost} {t.coins} · DPS {getDps(tower.damage, tower.cooldown)} · {getPlacementUiLabel(tower, language)}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="menu-actions loadout-actions">
+            <button className="ghost" type="button" onClick={() => openScreenWithTransition('loadout')}>
+              Назад к набору
+            </button>
+          </div>
+        </section>
+      )}
+
       {screen === 'loadout' && (
         <section className="loadout-screen">
           <span className="broken-clock screen-clock loadout-clock" aria-hidden="true" />
@@ -5854,10 +6050,10 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
             <div className="loadout-bestiary" aria-label={t.bestiary}>
               <div className="loadout-panel-heading">
                 <strong>{t.bestiary}</strong>
-                <span>{coins} {t.coins} · {equippedTowerIds.length}/{towerSlots.length} {t.selected}</span>
+                <span>{equippedTowerIds.length}/{towerSlots.length} {t.selected}</span>
               </div>
               <div className="bestiary-list loadout-bestiary-list">
-                {availableTowerKinds.map((tower) => {
+                {availableTowerKinds.filter((tower) => unlockedTowerSet.has(tower.id)).map((tower) => {
                   const isUnlocked = unlockedTowerSet.has(tower.id);
                   const isEquipped = towerSlots.includes(tower.id);
                   const canUnlockByChallenge = isTowerUnlockedByChallenge(tower.id, achievementStats, completedLevelIds.length);
@@ -5941,6 +6137,9 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           <div className="menu-actions loadout-actions">
             <button className="ghost" type="button" onClick={() => openScreenWithTransition('difficulty')}>
               {t.backToDifficulty}
+            </button>
+            <button className="secondary" type="button" onClick={() => openScreenWithTransition('market')}>
+              Рынок башен
             </button>
             <button type="button" onClick={beginBattleAfterLoadout} disabled={!isLoadoutReady}>
               {t.toBattle}
@@ -6179,11 +6378,16 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                 </span>
               )}
               {hitTower && <span key={`hit-${hitTower.id}-${hitTower.attackCount}`} className="hit-spark" />}
-              {cellEnemies.map((enemy, index) => (
+              {cellEnemies.map((enemy, index) => {
+                const crowdOffset = cellEnemies.length > 1 ? enemyCrowdOffsets[index % enemyCrowdOffsets.length] : enemyCrowdOffsets[0];
+                const enemyScale = cellEnemies.length > 1 ? crowdOffset.scale : 1;
+
+                return (
                 <span
                   className={[
                     'enemy',
                     'time-distorted',
+                    cellEnemies.length > 1 ? 'crowded' : '',
                     enemy.isBoss ? 'boss' : '',
                     enemy.isBossServant ? 'boss-servant' : '',
                     enemy.isSecretWave ? 'secret-wave' : '',
@@ -6194,7 +6398,13 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                     enemy.lastHitKind ? `hit-${enemy.lastHitKind}` : '',
                   ].join(' ')}
                   key={`${enemy.id}-${enemy.lastHitAt}`}
-                  style={{ animationDelay: `${index * 120}ms` }}
+                  style={{
+                    '--enemy-x': `${crowdOffset.x}%`,
+                    '--enemy-y': `${crowdOffset.y}%`,
+                    '--enemy-scale': enemy.isBoss ? Math.max(enemyScale, 0.82) : enemyScale,
+                    animationDelay: `${index * 120}ms`,
+                    zIndex: 4 + Math.min(index, enemyCrowdOffsets.length - 1),
+                  } as CSSProperties}
                 >
                   <span className="time-ring" />
                   <span className="time-ring late" />
@@ -6222,7 +6432,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                   </span>
                   <i className="enemy-health" style={{ width: `${Math.max(8, (enemy.hp / enemy.maxHp) * 100)}%` }} />
                 </span>
-              ))}
+                );
+              })}
             </button>
           );
         })}
