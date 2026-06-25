@@ -12,10 +12,28 @@ export default function App() {
   useEffect(() => {
     if (!supabase) return;
 
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
+    let mounted = true;
+    const loadingFallback = window.setTimeout(() => {
+      if (mounted) {
+        setLoading(false);
+      }
+    }, 2500);
+
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!mounted) return;
+        setSession(data.session);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setSession(null);
+      })
+      .finally(() => {
+        if (!mounted) return;
+        window.clearTimeout(loadingFallback);
+        setLoading(false);
+      });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
@@ -24,7 +42,11 @@ export default function App() {
       }
     });
 
-    return () => sub.subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      window.clearTimeout(loadingFallback);
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   if (loading) {

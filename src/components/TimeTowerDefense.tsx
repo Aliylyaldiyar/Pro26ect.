@@ -338,6 +338,13 @@ type ExperienceFlash = {
   leveledUp: boolean;
 };
 
+type BattleSummary = {
+  kills: number;
+  bosses: number;
+  waves: number;
+  xp: number;
+};
+
 type DailyChallenge = {
   title: string;
   description: string;
@@ -648,11 +655,15 @@ const achievementStatsStorageKey = 'chrono-defense-achievement-stats';
 const tutorialSeenStorageKey = 'chrono-defense-tutorial-seen';
 const playerNameStorageKey = 'chrono-defense-player-name';
 const languageStorageKey = 'chrono-defense-language';
+const soundEnabledStorageKey = 'chrono-defense-sound-enabled';
+const musicEnabledStorageKey = 'chrono-defense-music-enabled';
+const performanceModeStorageKey = 'chrono-defense-performance-mode';
 const tutorialBuildCell = 44;
 const movementThreshold = 8;
 const bossEnemyKindId: EasyMonsterId = 'tickingScarab';
 const baseLevelXp = 120;
 const adminReviewEmails = ['aliyyaldiyar@gmail.com'];
+const finalReleaseVersion = 'v1.0 Final';
 
 const languageOptions: Array<{ code: LanguageCode; label: string }> = [
   { code: 'ru', label: 'RU' },
@@ -1025,6 +1036,64 @@ const levelText: Record<LanguageCode, Record<number, { title: string; mapTitle: 
     4: { title: 'Бу ауданы', mapTitle: 'Индустриялық дәуір' },
     5: { title: 'Секунд жарығы', mapTitle: 'Болашақ' },
     6: { title: 'Соңғы портал', mapTitle: 'Киберпанк' },
+  },
+};
+
+const releaseText: Record<LanguageCode, {
+  releaseBadge: string;
+  leaveReview: string;
+  sound: string;
+  music: string;
+  performanceMode: string;
+  enabled: string;
+  disabled: string;
+  victorySubtitle: string;
+  nextLevel: string;
+  defeatedEnemies: string;
+  earnedXp: string;
+  clearedWaves: string;
+}> = {
+  ru: {
+    releaseBadge: 'Финальная сборка',
+    leaveReview: 'Оставить отзыв',
+    sound: 'Звуки',
+    music: 'Музыка',
+    performanceMode: 'Режим производительности',
+    enabled: 'Включено',
+    disabled: 'Выключено',
+    victorySubtitle: 'Портал стабилен. Отличная защита для финального билда.',
+    nextLevel: 'Следующий уровень',
+    defeatedEnemies: 'Побеждено врагов',
+    earnedXp: 'Получено XP',
+    clearedWaves: 'Волн отбито',
+  },
+  en: {
+    releaseBadge: 'Final build',
+    leaveReview: 'Leave review',
+    sound: 'Sound',
+    music: 'Music',
+    performanceMode: 'Performance mode',
+    enabled: 'Enabled',
+    disabled: 'Disabled',
+    victorySubtitle: 'The portal is stable. Great defense for the final build.',
+    nextLevel: 'Next level',
+    defeatedEnemies: 'Enemies defeated',
+    earnedXp: 'XP earned',
+    clearedWaves: 'Waves cleared',
+  },
+  kk: {
+    releaseBadge: 'Финалдық жинақ',
+    leaveReview: 'Пікір қалдыру',
+    sound: 'Дыбыстар',
+    music: 'Музыка',
+    performanceMode: 'Өнімділік режимі',
+    enabled: 'Қосулы',
+    disabled: 'Өшірулі',
+    victorySubtitle: 'Портал тұрақты. Финалдық нұсқаға лайық қорғаныс.',
+    nextLevel: 'Келесі деңгей',
+    defeatedEnemies: 'Жеңілген жаулар',
+    earnedXp: 'Жиналған XP',
+    clearedWaves: 'Қайтарылған толқын',
   },
 };
 
@@ -2732,6 +2801,13 @@ function readSavedLanguage(): LanguageCode {
   return savedLanguage === 'ru' || savedLanguage === 'en' || savedLanguage === 'kk' ? savedLanguage : 'ru';
 }
 
+function readSavedBoolean(storageKey: string, fallback: boolean) {
+  const savedValue = window.localStorage.getItem(storageKey);
+  if (savedValue === null) return fallback;
+
+  return savedValue === 'true';
+}
+
 function savePlayerName(name: string) {
   const cleanName = name.trim();
   if (cleanName) {
@@ -2769,6 +2845,9 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [experienceFlash, setExperienceFlash] = useState<ExperienceFlash | null>(null);
   const [retentionLoading, setRetentionLoading] = useState(Boolean(userId));
+  const [soundEnabled, setSoundEnabled] = useState(() => readSavedBoolean(soundEnabledStorageKey, true));
+  const [musicEnabled, setMusicEnabled] = useState(() => readSavedBoolean(musicEnabledStorageKey, true));
+  const [performanceMode, setPerformanceMode] = useState(() => readSavedBoolean(performanceModeStorageKey, false));
   const [selectedLevelId, setSelectedLevelId] = useState(1);
   const [selectedEraMissionId, setSelectedEraMissionId] = useState(1);
   const [difficulty, setDifficulty] = useState<Difficulty['id']>('easy');
@@ -2794,6 +2873,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const [commentatorMessage, setCommentatorMessage] = useState('');
   const [gameStartedAt, setGameStartedAt] = useState<number | null>(null);
   const [defeatDurationSeconds, setDefeatDurationSeconds] = useState(0);
+  const [victoryDurationSeconds, setVictoryDurationSeconds] = useState(0);
+  const [battleSummary, setBattleSummary] = useState<BattleSummary>({ kills: 0, bosses: 0, waves: 0, xp: 0 });
   const [boardTilt, setBoardTilt] = useState(boardViewAngle);
   const [boardTurn, setBoardTurn] = useState(358);
   const [boardZoom, setBoardZoom] = useState(1);
@@ -2851,6 +2932,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const skipSecondsLeft = Math.max(0, skipUnlockDelay - waveElapsedSeconds);
   const canSkipWave = isWaveRunning && skipSecondsLeft === 0 && baseHp > 0 && !isVictory;
   const t = uiText[language];
+  const finalText = releaseText[language];
   const selectedLevelUi = getLevelUiText(selectedLevel, language);
   const selectedMissionTitle = selectedEraMission.title[language];
   const epochTablet = epochTabletText[language];
@@ -2893,6 +2975,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   }
 
   function startBackgroundMusic() {
+    if (!musicEnabled) return;
+
     const audioContext = getAudioContext();
     if (backgroundMusicRef.current) return;
 
@@ -2906,10 +2990,14 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   }
 
   function activateAudio() {
+    if (!musicEnabled) return;
+
     startBackgroundMusic();
   }
 
   function playSound(sound: GameSound) {
+    if (!soundEnabled) return;
+
     const audioContext = getAudioContext();
     startBackgroundMusic();
     playGameSound(audioContext, sound);
@@ -3213,6 +3301,22 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     window.localStorage.setItem(languageStorageKey, language);
     document.documentElement.lang = language;
   }, [language]);
+
+  useEffect(() => {
+    window.localStorage.setItem(soundEnabledStorageKey, String(soundEnabled));
+  }, [soundEnabled]);
+
+  useEffect(() => {
+    window.localStorage.setItem(musicEnabledStorageKey, String(musicEnabled));
+    if (!musicEnabled) {
+      stopBackgroundMusic(backgroundMusicRef.current);
+      backgroundMusicRef.current = null;
+    }
+  }, [musicEnabled]);
+
+  useEffect(() => {
+    window.localStorage.setItem(performanceModeStorageKey, String(performanceMode));
+  }, [performanceMode]);
 
   useEffect(() => {
     const previousXp = previousXpRef.current;
@@ -3648,6 +3752,14 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
       setTowers(nextTowers);
       if (defeatedCount > 0 || defeatedBosses > 0 || completedWaveCount > 0) {
+        const gainedXp = defeatedCount * 2 + completedWaveCount * (30 + getArchiveXpBonus(towers)) + defeatedBosses * 220;
+
+        setBattleSummary((current) => ({
+          kills: current.kills + defeatedCount,
+          bosses: current.bosses + defeatedBosses,
+          waves: current.waves + completedWaveCount,
+          xp: current.xp + gainedXp,
+        }));
         setAchievementStats((current) => ({
           ...current,
           totalKills: current.totalKills + defeatedCount,
@@ -3656,7 +3768,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         }));
         updateRetentionProfile((current) => ({
           ...current,
-          xp: current.xp + defeatedCount * 2 + completedWaveCount * (30 + getArchiveXpBonus(towers)) + defeatedBosses * 220,
+          xp: current.xp + gainedXp,
           total_kills: current.total_kills + defeatedCount,
           daily_kills: current.daily_kills + defeatedCount,
           daily_waves: current.daily_waves + completedWaveCount,
@@ -3720,6 +3832,9 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   useEffect(() => {
     if (!isVictory) return;
 
+    setVictoryDurationSeconds((current) =>
+      current > 0 ? current : gameStartedAt ? Math.max(1, Math.floor((Date.now() - gameStartedAt) / 1000)) : 0,
+    );
     setCompletedLevelIds((current) =>
       current.includes(selectedProgressLevelId) ? current : [...current, selectedProgressLevelId],
     );
@@ -3730,7 +3845,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       noDamageVictories: current.noDamageVictories + (runChallengeRef.current.tookDamage ? 0 : 1),
       noSkipVictories: current.noSkipVictories + (runChallengeRef.current.skippedWave ? 0 : 1),
     }));
-  }, [difficulty, isVictory, selectedProgressLevelId]);
+  }, [difficulty, gameStartedAt, isVictory, selectedProgressLevelId]);
 
   useEffect(() => {
     if (baseHp === 0) {
@@ -4016,6 +4131,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     runChallengeRef.current = { tookDamage: false, skippedWave: false };
     setGameStartedAt(null);
     setDefeatDurationSeconds(0);
+    setVictoryDurationSeconds(0);
+    setBattleSummary({ kills: 0, bosses: 0, waves: 0, xp: 0 });
   }
 
   function selectDifficulty(mode: Difficulty) {
@@ -4150,6 +4267,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     setWaveTimeLeft(getWaveDuration(wave, gameMode, selectedMaxWaves));
     playSound('waveStart');
     setIsWaveRunning(true);
+    setBattleSummary((current) => ({ ...current, xp: current.xp + 3 }));
     setAchievementStats((current) => ({ ...current, maxWaveReached: Math.max(current.maxWaveReached, wave) }));
     updateRetentionProfile((current) => ({
       ...current,
@@ -4217,6 +4335,28 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     setSelectedTowerId(null);
     openScreenWithTransition('start');
     setMessage('Поставь башни и запусти первую волну.');
+  }
+
+  function goToNextLevel() {
+    resetGame(selectedDifficultyData, selectedMissionStartWave, gameMode);
+    setSelectedTowerId(null);
+
+    const nextMission = selectedEraMissions.find((mission) => mission.id > selectedEraMission.id);
+    if (nextMission) {
+      setSelectedEraMissionId(nextMission.id);
+      openScreenWithTransition('difficulty');
+      return;
+    }
+
+    const nextLevel = levelMap.find((level) => level.id > selectedLevel.id);
+    if (nextLevel) {
+      setSelectedLevelId(nextLevel.id);
+      setSelectedEraMissionId(1);
+      openScreenWithTransition('epochLevels');
+      return;
+    }
+
+    openScreenWithTransition('start');
   }
 
   function startCameraDrag(event: PointerEvent<HTMLDivElement>) {
@@ -4374,7 +4514,11 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
   return (
     <section
-      className={`game-shell ${screen === 'battle' && baseHp === 0 ? 'defeat-state' : ''}`}
+      className={[
+        'game-shell',
+        screen === 'battle' && baseHp === 0 ? 'defeat-state' : '',
+        performanceMode ? 'performance-mode' : '',
+      ].join(' ')}
       style={{ '--era': era.accent } as CSSProperties}
       onPointerOver={handleUiPointerOver}
       onClickCapture={handleUiClick}
@@ -4521,6 +4665,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           <div>
             <h3>{t.startTitle}</h3>
             <p>{t.startSubtitle}</p>
+            <span className="release-badge">{finalReleaseVersion} · {finalText.releaseBadge}</span>
             <div className="name-editor">
               {!isEditingName ? (
                 <button className="secondary" type="button" onClick={openNameEditor}>
@@ -4579,6 +4724,9 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
             </button>
             <button className="secondary" type="button" onClick={() => openScreenWithTransition('settings')}>
               {t.settings}
+            </button>
+            <button className="secondary" type="button" onClick={() => openScreenWithTransition('settings')}>
+              {finalText.leaveReview}
             </button>
             <button className="secondary" type="button" onClick={() => openScreenWithTransition('tutorial')}>
               {t.tutorial}
@@ -4652,6 +4800,35 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           <div className="achievement-summary">
             <strong>{Math.round(boardZoom * 100)}%</strong>
             <span>{t.cameraZoom}</span>
+          </div>
+          <div className="settings-toggles">
+            <button
+              className={soundEnabled ? 'active' : ''}
+              type="button"
+              onClick={() => setSoundEnabled((current) => !current)}
+              aria-pressed={soundEnabled}
+            >
+              <strong>{finalText.sound}</strong>
+              <span>{soundEnabled ? finalText.enabled : finalText.disabled}</span>
+            </button>
+            <button
+              className={musicEnabled ? 'active' : ''}
+              type="button"
+              onClick={() => setMusicEnabled((current) => !current)}
+              aria-pressed={musicEnabled}
+            >
+              <strong>{finalText.music}</strong>
+              <span>{musicEnabled ? finalText.enabled : finalText.disabled}</span>
+            </button>
+            <button
+              className={performanceMode ? 'active' : ''}
+              type="button"
+              onClick={() => setPerformanceMode((current) => !current)}
+              aria-pressed={performanceMode}
+            >
+              <strong>{finalText.performanceMode}</strong>
+              <span>{performanceMode ? finalText.enabled : finalText.disabled}</span>
+            </button>
           </div>
           <div className="language-picker" aria-label={t.language}>
             {languageOptions.map((option) => (
@@ -5183,6 +5360,24 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       )}
         </div>
 
+      {commentatorMessage && (
+        <div className="ai-commentary" aria-live="polite">
+          <span className="commentator-portrait" aria-hidden="true">
+            <span className="commentator-aura" />
+            <span className="commentator-arm arm-left" />
+            <span className="commentator-arm arm-right" />
+            <span className="commentator-body" />
+            <span className="commentator-head" />
+            <span className="commentator-eye eye-left" />
+            <span className="commentator-eye eye-right" />
+          </span>
+          <span className="commentary-copy">
+            <strong>Эклипс</strong>
+            <p>{commentatorMessage.replace(/^\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0442\u043e\u0440:\s*/i, '')}</p>
+          </span>
+        </div>
+      )}
+
       <div
         ref={boardRef}
         className={`board board-${selectedLevel.mapArea}`}
@@ -5316,13 +5511,39 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       </div>
 
       <p className="message">{message}</p>
-      {commentatorMessage && (
-        <div className="ai-commentary">
-          <span className="commentator-portrait" aria-hidden="true">
-            <span className="commentator-head" />
-            <span className="commentator-body" />
-          </span>
-          <p>{commentatorMessage}</p>
+      {isVictory && (
+        <div className="victory-overlay" role="dialog" aria-modal="true" aria-labelledby="victory-title">
+          <div className="victory-modal">
+            <span className="victory-mark" aria-hidden="true">✓</span>
+            <h3 id="victory-title">{t.victory}</h3>
+            <p>{finalText.victorySubtitle}</p>
+            <div className="victory-stats">
+              <span>
+                <small>{t.gameTime}</small>
+                <strong>{formatDuration(victoryDurationSeconds)}</strong>
+              </span>
+              <span>
+                <small>{finalText.clearedWaves}</small>
+                <strong>{battleSummary.waves}</strong>
+              </span>
+              <span>
+                <small>{finalText.defeatedEnemies}</small>
+                <strong>{battleSummary.kills}</strong>
+              </span>
+              <span>
+                <small>{finalText.earnedXp}</small>
+                <strong>{battleSummary.xp}</strong>
+              </span>
+            </div>
+            <div className="defeat-actions">
+              <button type="button" onClick={goToNextLevel}>
+                {finalText.nextLevel}
+              </button>
+              <button className="secondary" type="button" onClick={returnToMainMenu}>
+                {t.mainMenu}
+              </button>
+            </div>
+          </div>
         </div>
       )}
       {baseHp === 0 && (

@@ -55,7 +55,7 @@ export function getEasyMonsterName(id: EasyMonsterId) {
 
 export function MonsterIcon({ id }: MonsterIconProps) {
   return (
-    <svg className={`monster-icon monster-icon-${id}`} viewBox="0 0 64 74" role="img" aria-label={easyMonsterLabels[id]}>
+    <svg className={`monster-icon monster-icon-${id}`} viewBox="0 0 80 112" role="img" aria-label={easyMonsterLabels[id]}>
       <defs>
         <filter id={`${id}-shadow`} x="-30%" y="-25%" width="160%" height="160%" colorInterpolationFilters="sRGB">
           <feDropShadow dx="0" dy="3" stdDeviation="2" floodColor="#071517" floodOpacity="0.3" />
@@ -66,14 +66,25 @@ export function MonsterIcon({ id }: MonsterIconProps) {
           <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
         </radialGradient>
       </defs>
-      <ellipse className="monster-ground-shadow" cx="32" cy="67" rx="18" ry="4" />
-      <circle className="monster-aura" cx="32" cy="38" r="29" />
-      <MonsterShape id={id} />
+      <ellipse className="monster-ground-shadow" cx="40" cy="105" rx="24" ry="5" />
+      <circle className="monster-aura" cx="40" cy="54" r="34" />
+      <g className="monster-full-body-frame">
+        <path className="monster-back-cloak" d="M24 42C28 32 52 32 56 42L62 91C54 101 28 101 18 91L24 42Z" />
+        <path className="monster-arm monster-arm-left" d="M25 50L11 76L20 82L33 58" />
+        <path className="monster-arm monster-arm-right" d="M55 50L69 76L60 82L47 58" />
+        <path className="monster-body-core" d="M25 45C32 37 49 37 55 46L59 84C50 92 31 92 22 84L25 45Z" />
+        <path className="monster-chest-glow" d="M40 49L48 65L40 82L32 65Z" />
+        <path className="monster-leg monster-leg-left" d="M29 83L21 105H34L42 84" />
+        <path className="monster-leg monster-leg-right" d="M49 83L58 105H45L38 84" />
+      </g>
+      <g className="monster-head-mark" transform="translate(8 5) scale(0.9)">
+        <MonsterShape id={id} />
+      </g>
       <path
         className="monster-shine"
-        d="M16 23C22 13 38 9 49 21"
+        d="M18 22C26 10 48 8 62 23"
         stroke={`url(#${id}-shine)`}
-        strokeWidth="7"
+        strokeWidth="8"
         strokeLinecap="round"
       />
     </svg>
