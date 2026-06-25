@@ -13875,3 +13875,666 @@ input {
     opacity: 0.68;
   }
 }
+
+/* Final visual unification: level map, epoch tablet, loadout and battle dock */
+.game-shell .level-screen,
+.game-shell .epoch-tablet-screen,
+.game-shell .loadout-screen,
+.game-shell .difficulty-screen {
+  color: #f8f2df;
+  border: 1px solid rgba(128, 226, 207, 0.18);
+  background:
+    linear-gradient(135deg, rgba(23, 31, 45, 0.94), rgba(12, 17, 31, 0.94) 58%, rgba(34, 24, 56, 0.9)),
+    radial-gradient(circle at 18% 12%, rgba(127, 94, 255, 0.18), transparent 34%),
+    radial-gradient(circle at 84% 18%, rgba(90, 215, 210, 0.14), transparent 32%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 24px 70px rgba(0, 0, 0, 0.34);
+}
+
+.game-shell .level-screen::after,
+.game-shell .epoch-tablet::after,
+.game-shell .loadout-screen::after,
+.game-shell .difficulty-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent, rgba(113, 235, 223, 0.07), transparent),
+    repeating-linear-gradient(0deg, transparent 0 18px, rgba(255, 255, 255, 0.025) 18px 19px);
+  mix-blend-mode: screen;
+  opacity: 0.45;
+}
+
+.game-shell .screen-heading h3,
+.game-shell .tablet-heading h3 {
+  color: #fff9e8;
+  text-shadow: 0 0 28px rgba(126, 96, 255, 0.28);
+}
+
+.game-shell .screen-heading p,
+.game-shell .tablet-heading p {
+  color: rgba(248, 242, 223, 0.72);
+}
+
+.game-shell .menu-actions button,
+.game-shell .tablet-actions button,
+.game-shell .loadout-actions button {
+  border: 1px solid rgba(238, 198, 116, 0.34);
+  color: #f7eddb;
+  background:
+    linear-gradient(135deg, rgba(75, 62, 38, 0.92), rgba(29, 38, 50, 0.94)),
+    linear-gradient(90deg, rgba(108, 238, 219, 0.18), transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 12px 24px rgba(0, 0, 0, 0.24);
+}
+
+.game-shell .menu-actions button:not(:disabled):hover,
+.game-shell .tablet-actions button:not(:disabled):hover,
+.game-shell .loadout-actions button:not(:disabled):hover {
+  border-color: rgba(116, 235, 220, 0.58);
+  background:
+    linear-gradient(135deg, rgba(33, 77, 85, 0.94), rgba(41, 32, 62, 0.94)),
+    linear-gradient(90deg, rgba(242, 199, 113, 0.16), transparent);
+  transform: translateY(-1px);
+}
+
+.game-shell .menu-actions button.ghost,
+.game-shell .tablet-actions button.ghost,
+.game-shell .loadout-actions button.ghost {
+  color: #243040;
+  border-color: rgba(255, 244, 219, 0.9);
+  background: linear-gradient(180deg, #f4efe4, #d8d3c8);
+}
+
+.game-shell .level-map-layout {
+  position: relative;
+  border: 1px solid rgba(120, 232, 218, 0.16);
+  background:
+    linear-gradient(180deg, rgba(11, 15, 30, 0.76), rgba(13, 18, 33, 0.9)),
+    radial-gradient(circle at 50% 52%, rgba(126, 92, 255, 0.2), transparent 42%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.game-shell .level-map-card {
+  border: 1px solid rgba(128, 226, 207, 0.18);
+  background:
+    linear-gradient(145deg, rgba(19, 26, 44, 0.78), rgba(15, 19, 36, 0.82)),
+    radial-gradient(circle at 50% 52%, rgba(239, 195, 104, 0.12), transparent 36%);
+  box-shadow:
+    inset 0 0 34px rgba(122, 96, 255, 0.08),
+    0 16px 36px rgba(0, 0, 0, 0.26);
+}
+
+.game-shell .level-map {
+  background:
+    linear-gradient(180deg, rgba(21, 29, 50, 0.82), rgba(12, 16, 31, 0.9)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 72px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.026) 0 1px, transparent 1px 64px);
+}
+
+.game-shell .level-node {
+  border: 1px solid rgba(128, 226, 207, 0.34);
+  background:
+    linear-gradient(135deg, rgba(12, 27, 41, 0.95), rgba(8, 14, 28, 0.97)),
+    linear-gradient(90deg, rgba(99, 224, 214, 0.34) 0 3%, transparent 3% 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 16px 30px rgba(0, 0, 0, 0.28);
+}
+
+.game-shell .level-node.active,
+.game-shell .level-node:hover {
+  border-color: rgba(239, 202, 121, 0.8);
+  box-shadow:
+    0 0 0 2px rgba(239, 202, 121, 0.15),
+    0 18px 36px rgba(0, 0, 0, 0.34);
+}
+
+.game-shell .level-node .level-number {
+  color: #172233;
+  background:
+    radial-gradient(circle at 36% 30%, #fff6d7, #b99d65 44%, #26384b 100%);
+  box-shadow: 0 0 18px rgba(238, 205, 131, 0.36);
+}
+
+.game-shell .map-legend {
+  border: 1px solid rgba(128, 226, 207, 0.16);
+  background: rgba(10, 15, 28, 0.72);
+  color: rgba(248, 242, 223, 0.72);
+}
+
+.game-shell .epoch-tablet-screen {
+  padding: 32px 26px;
+}
+
+.game-shell .epoch-tablet-grip {
+  border: 1px solid rgba(128, 226, 207, 0.2);
+  background:
+    linear-gradient(145deg, rgba(29, 39, 58, 0.74), rgba(12, 16, 31, 0.92)),
+    radial-gradient(circle at 18% 8%, rgba(126, 92, 255, 0.14), transparent 35%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 22px 50px rgba(0, 0, 0, 0.3);
+}
+
+.game-shell .epoch-tablet {
+  border: 1px solid rgba(128, 226, 207, 0.18);
+  background:
+    linear-gradient(135deg, rgba(14, 21, 37, 0.92), rgba(16, 24, 41, 0.88)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.028) 0 1px, transparent 1px 74px);
+}
+
+.game-shell .tablet-heading > span {
+  color: rgba(238, 205, 132, 0.88);
+  border-color: rgba(238, 205, 132, 0.28);
+  background: rgba(238, 205, 132, 0.08);
+}
+
+.game-shell .tablet-level-grid {
+  gap: 18px;
+}
+
+.game-shell .tablet-level-card {
+  color: #f9f2df;
+  border: 1px solid rgba(128, 226, 207, 0.22);
+  background:
+    linear-gradient(150deg, rgba(22, 43, 57, 0.92), rgba(17, 22, 41, 0.94)),
+    radial-gradient(circle at 16% 12%, rgba(117, 231, 218, 0.14), transparent 32%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 16px 34px rgba(0, 0, 0, 0.24);
+}
+
+.game-shell .tablet-level-card:hover,
+.game-shell .tablet-level-card.active {
+  border-color: rgba(238, 205, 132, 0.72);
+  background:
+    linear-gradient(150deg, rgba(34, 58, 66, 0.94), rgba(28, 25, 50, 0.94)),
+    radial-gradient(circle at 16% 12%, rgba(238, 205, 132, 0.18), transparent 32%);
+}
+
+.game-shell .tablet-level-card p,
+.game-shell .tablet-level-card small {
+  color: rgba(248, 242, 223, 0.7);
+}
+
+.game-shell .tablet-level-card small {
+  border-color: rgba(128, 226, 207, 0.16);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.game-shell .tablet-level-card em {
+  color: #f5d694;
+  background: rgba(238, 205, 132, 0.12);
+  border-top: 2px solid rgba(113, 235, 220, 0.74);
+}
+
+.game-shell .tablet-level-number {
+  color: #142234;
+  background:
+    radial-gradient(circle at 34% 28%, #efffe9, #80e2cf 48%, #31425c 100%);
+  box-shadow: 0 0 18px rgba(128, 226, 207, 0.32);
+}
+
+.game-shell .loadout-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.game-shell .loadout-layout {
+  display: grid;
+  grid-template-columns: minmax(340px, 0.9fr) minmax(520px, 1.6fr);
+  gap: 16px;
+  min-height: 430px;
+}
+
+.game-shell .loadout-bestiary,
+.game-shell .loadout-slots,
+.game-shell .battle-side-panel,
+.game-shell .battle-control-panel,
+.game-shell .battle-tower-picker {
+  border: 1px solid rgba(128, 226, 207, 0.18);
+  background:
+    linear-gradient(145deg, rgba(16, 24, 40, 0.86), rgba(10, 14, 26, 0.9)),
+    radial-gradient(circle at 24% 0%, rgba(128, 226, 207, 0.1), transparent 38%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 16px 36px rgba(0, 0, 0, 0.22);
+}
+
+.game-shell .loadout-bestiary,
+.game-shell .loadout-slots {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.game-shell .loadout-panel-heading {
+  border-bottom: 1px solid rgba(128, 226, 207, 0.16);
+  background:
+    linear-gradient(90deg, rgba(128, 226, 207, 0.12), transparent),
+    rgba(255, 255, 255, 0.025);
+}
+
+.game-shell .loadout-panel-heading strong {
+  color: #fff5dc;
+}
+
+.game-shell .loadout-panel-heading span {
+  color: rgba(238, 205, 132, 0.86);
+  background: rgba(238, 205, 132, 0.1);
+  border: 1px solid rgba(238, 205, 132, 0.18);
+}
+
+.game-shell .loadout-bestiary-list {
+  max-height: min(52vh, 520px);
+  padding: 10px;
+  gap: 8px;
+  scrollbar-color: rgba(128, 226, 207, 0.56) rgba(255, 255, 255, 0.06);
+}
+
+.game-shell .bestiary-list.loadout-bestiary-list .bestiary-item {
+  min-height: 78px;
+  padding: 10px 12px 10px 66px;
+  border: 1px solid rgba(128, 226, 207, 0.2);
+  background:
+    linear-gradient(135deg, rgba(18, 31, 46, 0.9), rgba(12, 16, 28, 0.95)),
+    linear-gradient(90deg, rgba(128, 226, 207, 0.18) 0 4px, transparent 4px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.game-shell .bestiary-list.loadout-bestiary-list .bestiary-item:hover,
+.game-shell .bestiary-list.loadout-bestiary-list .bestiary-item.equipped {
+  border-color: rgba(238, 205, 132, 0.72);
+  background:
+    linear-gradient(135deg, rgba(33, 49, 58, 0.94), rgba(20, 20, 39, 0.95)),
+    linear-gradient(90deg, rgba(238, 205, 132, 0.45) 0 4px, transparent 4px);
+}
+
+.game-shell .bestiary-list.loadout-bestiary-list .bestiary-item.locked {
+  opacity: 0.82;
+  border-color: rgba(238, 205, 132, 0.2);
+}
+
+.game-shell .bestiary-list.loadout-bestiary-list .bestiary-item span:first-child {
+  left: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: rgba(255, 246, 224, 0.88);
+  box-shadow: 0 0 18px rgba(128, 226, 207, 0.18);
+}
+
+.game-shell .bestiary-list.loadout-bestiary-list .bestiary-item em {
+  color: #fff1cb;
+  font-size: 0.98rem;
+}
+
+.game-shell .bestiary-list.loadout-bestiary-list .bestiary-item small {
+  color: rgba(248, 242, 223, 0.68);
+}
+
+.game-shell .loadout-bestiary-list .market-price {
+  width: fit-content;
+  color: #1e2b3a;
+  background: linear-gradient(180deg, #f3d891, #b9944d);
+  border: 0;
+  box-shadow: 0 0 12px rgba(238, 205, 132, 0.18);
+}
+
+.game-shell .loadout-slots {
+  display: flex;
+  flex-direction: column;
+}
+
+.game-shell .tower-bar.loadout-tower-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  align-content: start;
+  gap: 12px;
+  padding: 16px;
+  min-height: 0;
+}
+
+.game-shell .loadout-tower-bar .tower-slot {
+  min-width: 0;
+  min-height: 132px;
+}
+
+.game-shell .loadout-tower-bar .tower-choice,
+.game-shell .battle-tower-picker .tower-choice {
+  height: 100%;
+  color: #f8f2df;
+  border: 1px solid rgba(128, 226, 207, 0.18);
+  background:
+    linear-gradient(145deg, rgba(23, 35, 51, 0.88), rgba(12, 16, 29, 0.94)),
+    radial-gradient(circle at 50% 0%, rgba(128, 226, 207, 0.12), transparent 42%);
+}
+
+.game-shell .loadout-tower-bar .tower-slot.active .tower-choice,
+.game-shell .battle-tower-picker .tower-slot.active .tower-choice {
+  border-color: rgba(238, 205, 132, 0.76);
+  box-shadow: 0 0 0 2px rgba(238, 205, 132, 0.12);
+}
+
+.game-shell .loadout-tower-bar .tower-slot.empty .tower-choice,
+.game-shell .battle-tower-picker .tower-slot.empty .tower-choice {
+  border: 1px dashed rgba(128, 226, 207, 0.22);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02)),
+    rgba(9, 14, 26, 0.66);
+  color: rgba(248, 242, 223, 0.5);
+}
+
+.game-shell .loadout-tower-bar .tower-choice span,
+.game-shell .battle-tower-picker .tower-choice span {
+  background: rgba(255, 246, 224, 0.9);
+  border-radius: 10px;
+}
+
+.game-shell .loadout-tower-bar .tower-choice strong,
+.game-shell .battle-tower-picker .tower-choice strong {
+  color: #fff2d4;
+}
+
+.game-shell .loadout-tower-bar .tower-choice small,
+.game-shell .battle-tower-picker .tower-choice small {
+  color: rgba(248, 242, 223, 0.66);
+}
+
+.game-shell .tower-slot.empty .tower-choice span {
+  color: rgba(128, 226, 207, 0.75);
+  background: rgba(128, 226, 207, 0.1);
+}
+
+.game-shell .slot-remove {
+  border: 1px solid rgba(255, 217, 192, 0.65);
+  background: linear-gradient(180deg, #a9352f, #6f1d22);
+  color: #fff7eb;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.32);
+}
+
+.game-shell .battle-side-panel {
+  color: #f8f2df;
+}
+
+.game-shell .battle-control-panel .wave-action,
+.game-shell .era-wave-action {
+  border: 1px solid rgba(128, 226, 207, 0.36);
+  background:
+    linear-gradient(135deg, rgba(47, 92, 100, 0.95), rgba(60, 45, 92, 0.95)),
+    linear-gradient(90deg, rgba(238, 205, 132, 0.12), transparent);
+}
+
+@media (max-width: 980px) {
+  .game-shell .loadout-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .game-shell .tower-bar.loadout-tower-bar {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+
+  .game-shell .loadout-bestiary-list {
+    max-height: 340px;
+  }
+}
+
+@media (max-width: 720px) {
+  .game-shell .level-screen,
+  .game-shell .epoch-tablet-screen,
+  .game-shell .loadout-screen,
+  .game-shell .difficulty-screen {
+    padding: 18px;
+  }
+
+  .game-shell .tower-bar.loadout-tower-bar,
+  .game-shell .tablet-level-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Battle board 3D readability pass */
+.game-shell .board {
+  gap: clamp(3px, 0.52vw, 6px);
+  perspective: 1200px;
+  filter: drop-shadow(0 34px 28px rgba(0, 0, 0, 0.26));
+}
+
+.game-shell .board::before {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 38%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 10%),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.05) 0 1px, transparent 1px 10%);
+}
+
+.game-shell .tile {
+  isolation: isolate;
+  border-radius: 7px;
+  transform: translateZ(10px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset -8px -10px 14px rgba(38, 52, 28, 0.2),
+    0 6px 0 color-mix(in srgb, #3f4f2e 72%, var(--era)),
+    0 10px 13px rgba(18, 22, 15, 0.24);
+}
+
+.game-shell .tile::after {
+  inset: auto 5px -8px 5px;
+  height: 8px;
+  border-radius: 0 0 7px 7px;
+}
+
+.game-shell .tile.build:not(.highland) {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--era) 46%, rgba(238, 255, 205, 0.68));
+  background:
+    radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.5) 0 17%, transparent 18%),
+    conic-gradient(from 45deg, transparent 0 12%, rgba(255, 255, 255, 0.24) 13% 15%, transparent 16% 37%, rgba(255, 255, 255, 0.2) 38% 40%, transparent 41%),
+    linear-gradient(135deg, color-mix(in srgb, var(--era) 18%, #d8ecc0), #9dbb76 58%, #708d54);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.23),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    inset -8px -10px 14px rgba(49, 62, 36, 0.14),
+    0 8px 0 #607844,
+    0 13px 15px rgba(34, 45, 27, 0.25),
+    0 0 0 1px color-mix(in srgb, var(--era) 24%, transparent);
+  transform: translateZ(15px);
+}
+
+.game-shell .tile.build:not(.highland)::before {
+  inset: 17%;
+  border: 2px solid color-mix(in srgb, var(--era) 56%, rgba(245, 255, 221, 0.62));
+  border-radius: 50%;
+  opacity: 0.78;
+}
+
+.game-shell .tile.highland {
+  z-index: 5;
+  overflow: visible;
+  border: 1px solid rgba(112, 92, 58, 0.72);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 250, 215, 0.72), rgba(154, 130, 86, 0.8) 44%, rgba(98, 78, 49, 0.96)),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.12) 0 5px, transparent 5px 13px);
+  transform: translateZ(31px);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.58),
+    inset -10px -14px 18px rgba(56, 41, 24, 0.26),
+    0 7px 0 #7b6847,
+    0 14px 0 #54422c,
+    0 24px 19px rgba(35, 25, 16, 0.38),
+    0 0 0 2px rgba(246, 215, 135, 0.18);
+}
+
+.game-shell .tile.highland::before {
+  inset: 13%;
+  border: 2px solid rgba(255, 239, 180, 0.55);
+  border-radius: 18%;
+  background:
+    radial-gradient(circle at 50% 52%, rgba(255, 248, 196, 0.74) 0 17%, transparent 18%),
+    linear-gradient(90deg, transparent 0 43%, rgba(90, 67, 39, 0.34) 44% 56%, transparent 57%),
+    linear-gradient(0deg, transparent 0 43%, rgba(90, 67, 39, 0.28) 44% 56%, transparent 57%),
+    radial-gradient(circle, rgba(255, 247, 206, 0.28), transparent 68%);
+  box-shadow:
+    inset 0 0 0 4px rgba(96, 75, 45, 0.16),
+    0 3px 0 rgba(87, 68, 40, 0.42);
+  opacity: 1;
+  transform: translateZ(9px);
+}
+
+.game-shell .tile.highland::after {
+  inset: auto 8px -16px 8px;
+  height: 16px;
+  border-radius: 0 0 8px 8px;
+  background:
+    linear-gradient(90deg, rgba(255, 230, 159, 0.2), transparent 28% 72%, rgba(35, 25, 17, 0.28)),
+    linear-gradient(180deg, #8a7048, #4f3e2a);
+  opacity: 0.96;
+  transform: rotateX(-90deg);
+  transform-origin: top;
+}
+
+.game-shell .tile.highland.build-plate {
+  background:
+    linear-gradient(135deg, rgba(255, 252, 224, 0.78), rgba(172, 148, 93, 0.86) 46%, rgba(89, 69, 42, 0.96)),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.14) 0 6px, transparent 6px 14px);
+}
+
+.game-shell .tile.highland:not(.has-tower)::before {
+  animation: highland-top-breathe 3.4s ease-in-out infinite;
+}
+
+.game-shell .tile.path {
+  z-index: 2;
+  transform: translateZ(3px);
+  box-shadow:
+    inset 0 2px 8px rgba(45, 29, 15, 0.34),
+    inset 0 -1px 0 rgba(255, 226, 166, 0.12),
+    0 3px 0 #604426,
+    0 6px 8px rgba(58, 40, 22, 0.22);
+}
+
+.game-shell .tile:not(:disabled):hover {
+  transform: translateZ(24px);
+}
+
+.game-shell .tile.highland:not(:disabled):hover {
+  transform: translateZ(40px);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.64),
+    inset -10px -14px 18px rgba(56, 41, 24, 0.24),
+    0 9px 0 #7b6847,
+    0 17px 0 #54422c,
+    0 28px 24px rgba(35, 25, 16, 0.42),
+    0 0 0 3px color-mix(in srgb, var(--era) 34%, rgba(246, 215, 135, 0.3));
+}
+
+.game-shell .tile.selected-tower {
+  transform: translateZ(28px);
+}
+
+.game-shell .tile.highland.selected-tower {
+  transform: translateZ(44px);
+}
+
+.game-shell .tile.has-tower {
+  z-index: 8;
+}
+
+.game-shell .tile.highland.has-tower {
+  z-index: 10;
+}
+
+.game-shell .tile.has-tower .tower {
+  transform:
+    rotateX(var(--board-tilt-inverse))
+    rotateZ(var(--board-turn-inverse))
+    translateY(-5px)
+    translateZ(54px);
+}
+
+.game-shell .tile.highland.has-tower .tower {
+  transform:
+    rotateX(var(--board-tilt-inverse))
+    rotateZ(var(--board-turn-inverse))
+    translateY(-13px)
+    translateZ(78px);
+}
+
+.game-shell .tower {
+  filter:
+    drop-shadow(0 14px 8px rgba(0, 0, 0, 0.3))
+    drop-shadow(0 2px 0 rgba(255, 255, 255, 0.16));
+}
+
+.game-shell .tower::before {
+  content: "";
+  position: absolute;
+  left: 16%;
+  right: 16%;
+  bottom: -8px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.32), transparent 70%);
+  z-index: -1;
+}
+
+.game-shell .battle-decoration {
+  transform:
+    rotateX(var(--board-tilt-inverse))
+    rotateZ(var(--board-turn-inverse))
+    translateY(-12px)
+    translateZ(46px);
+  filter:
+    drop-shadow(0 18px 10px rgba(0, 0, 0, 0.34))
+    drop-shadow(0 2px 0 rgba(255, 255, 255, 0.12))
+    saturate(1.12);
+}
+
+.game-shell .battle-decoration.mammoth,
+.game-shell .battle-decoration.volcano,
+.game-shell .battle-decoration.castleGate,
+.game-shell .battle-decoration.factoryBlock,
+.game-shell .battle-decoration.reactor,
+.game-shell .battle-decoration.dataCore {
+  transform:
+    rotateX(var(--board-tilt-inverse))
+    rotateZ(var(--board-turn-inverse))
+    translateY(-17px)
+    translateZ(58px);
+}
+
+.game-shell .battle-decoration::before {
+  filter: drop-shadow(0 10px 0 rgba(0, 0, 0, 0.16));
+}
+
+.game-shell .enemy {
+  transform:
+    rotateX(var(--board-tilt-inverse))
+    rotateZ(var(--board-turn-inverse))
+    translateY(-7px)
+    translateZ(42px);
+  filter: drop-shadow(0 10px 8px rgba(0, 0, 0, 0.3));
+}
+
+@keyframes highland-top-breathe {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 4px rgba(96, 75, 45, 0.16),
+      0 3px 0 rgba(87, 68, 40, 0.42);
+  }
+
+  50% {
+    box-shadow:
+      inset 0 0 0 4px rgba(96, 75, 45, 0.22),
+      0 3px 0 rgba(87, 68, 40, 0.46),
+      0 0 16px color-mix(in srgb, var(--era) 20%, rgba(255, 235, 161, 0.24));
+  }
+}
