@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { isSupabaseReady, supabase } from './lib/supabase';
 import { Auth } from './components/Auth';
-import { TimeTowerDefense } from './components/TimeTowerDefense';
+
+const TimeTowerDefense = lazy(() =>
+  import('./components/TimeTowerDefense').then((module) => ({ default: module.TimeTowerDefense })),
+);
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -84,11 +87,13 @@ export default function App() {
         )}
       </header>
 
+      <Suspense fallback={<p className="app-loading">Загрузка игры...</p>}>
       {session ? (
         <TimeTowerDefense userEmail={session.user.email ?? ''} userId={session.user.id} />
       ) : (
         <TimeTowerDefense userEmail="Гость" />
       )}
+      </Suspense>
     </main>
   );
 }

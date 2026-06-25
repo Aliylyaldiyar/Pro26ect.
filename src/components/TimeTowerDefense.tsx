@@ -345,6 +345,8 @@ type BattleSummary = {
   xp: number;
 };
 
+type SettingsFocus = 'top' | 'reviews';
+
 type DailyChallenge = {
   title: string;
   description: string;
@@ -1041,6 +1043,7 @@ const levelText: Record<LanguageCode, Record<number, { title: string; mapTitle: 
 
 const releaseText: Record<LanguageCode, {
   releaseBadge: string;
+  demoBattle: string;
   leaveReview: string;
   sound: string;
   music: string;
@@ -1055,6 +1058,7 @@ const releaseText: Record<LanguageCode, {
 }> = {
   ru: {
     releaseBadge: 'Финальная сборка',
+    demoBattle: 'Быстрый демо-бой',
     leaveReview: 'Оставить отзыв',
     sound: 'Звуки',
     music: 'Музыка',
@@ -1069,6 +1073,7 @@ const releaseText: Record<LanguageCode, {
   },
   en: {
     releaseBadge: 'Final build',
+    demoBattle: 'Quick demo battle',
     leaveReview: 'Leave review',
     sound: 'Sound',
     music: 'Music',
@@ -1083,6 +1088,7 @@ const releaseText: Record<LanguageCode, {
   },
   kk: {
     releaseBadge: 'Финалдық жинақ',
+    demoBattle: 'Жылдам демо-шайқас',
     leaveReview: 'Пікір қалдыру',
     sound: 'Дыбыстар',
     music: 'Музыка',
@@ -2848,6 +2854,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const [soundEnabled, setSoundEnabled] = useState(() => readSavedBoolean(soundEnabledStorageKey, true));
   const [musicEnabled, setMusicEnabled] = useState(() => readSavedBoolean(musicEnabledStorageKey, true));
   const [performanceMode, setPerformanceMode] = useState(() => readSavedBoolean(performanceModeStorageKey, false));
+  const [settingsFocus, setSettingsFocus] = useState<SettingsFocus>('top');
   const [selectedLevelId, setSelectedLevelId] = useState(1);
   const [selectedEraMissionId, setSelectedEraMissionId] = useState(1);
   const [difficulty, setDifficulty] = useState<Difficulty['id']>('easy');
@@ -2879,6 +2886,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const [boardTurn, setBoardTurn] = useState(358);
   const [boardZoom, setBoardZoom] = useState(1);
   const boardRef = useRef<HTMLDivElement | null>(null);
+  const reviewPanelRef = useRef<HTMLFormElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const backgroundMusicRef = useRef<BackgroundMusicEngine | null>(null);
   const lastButtonHoverSoundRef = useRef(0);
@@ -3410,6 +3418,16 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   }, [isReviewAdmin, screen, userId]);
 
   useEffect(() => {
+    if (screen !== 'settings' || settingsFocus !== 'reviews') return;
+
+    const timer = window.setTimeout(() => {
+      reviewPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 450);
+
+    return () => window.clearTimeout(timer);
+  }, [screen, settingsFocus]);
+
+  useEffect(() => {
     if (screen !== 'battle') return;
 
     const board = boardRef.current;
@@ -3916,6 +3934,11 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     openScreenWithTransition(nextScreen);
   }
 
+  function openSettings(nextFocus: SettingsFocus = 'top') {
+    setSettingsFocus(nextFocus);
+    openScreenWithTransition('settings');
+  }
+
   function enterGameFromWelcome() {
     if (welcomeExiting) return;
 
@@ -3952,6 +3975,29 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     setDefeatDurationSeconds(0);
     setMessage('Обучение началось: выбери первую башню в панели слева.');
     setCommentatorMessage('Комментатор: начнем с практики. Слева выбери башню, потом поставь ее на подсвеченную платформу.');
+  }
+
+  function startDemoBattle() {
+    const demoLevel = levelMap[0];
+    const demoMission = eraMissionCatalog[demoLevel.mapArea][0];
+    const demoDifficulty = difficultyModes[0];
+
+    activateAudio();
+    setGameMode('campaign');
+    setSelectedLevelId(demoLevel.id);
+    setSelectedEraMissionId(demoMission.id);
+    setDifficulty(demoDifficulty.id);
+    resetGame(demoDifficulty, demoLevel.startWave, 'campaign');
+    setTowerSlots(starterTowerSlots);
+    setUnlockedTowerIds(freeTowerIds);
+    setSelectedTower('arrow');
+    setPracticeTutorialActive(false);
+    setTutorialStep('selectTower');
+    openScreenWithTransition('battle');
+    setGameStartedAt(Date.now());
+    setDefeatDurationSeconds(0);
+    setCommentatorMessage('');
+    setMessage('Демо-бой готов: поставь стрелковую башню на платформу и запусти волну.');
   }
 
   function addTowerToSlot(kind: TowerKind['id']) {
@@ -4716,16 +4762,19 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
             }}>
               {t.start}
             </button>
+            <button className="secondary" type="button" onClick={startDemoBattle}>
+              {finalText.demoBattle}
+            </button>
             <button className="secondary time-loop-button" type="button" onClick={startTimeLoopMode}>
               Петля времени
             </button>
             <button className="secondary" type="button" onClick={() => openScreenWithTransition('achievements')}>
               {t.achievements} {completedAchievements}/{achievements.length}
             </button>
-            <button className="secondary" type="button" onClick={() => openScreenWithTransition('settings')}>
+            <button className="secondary" type="button" onClick={() => openSettings()}>
               {t.settings}
             </button>
-            <button className="secondary" type="button" onClick={() => openScreenWithTransition('settings')}>
+            <button className="secondary" type="button" onClick={() => openSettings('reviews')}>
               {finalText.leaveReview}
             </button>
             <button className="secondary" type="button" onClick={() => openScreenWithTransition('tutorial')}>
@@ -4843,7 +4892,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
               </button>
             ))}
           </div>
-          <form className="review-panel" onSubmit={submitReview}>
+          <form className="review-panel" ref={reviewPanelRef} onSubmit={submitReview}>
             <div className="review-heading">
               <strong>Отзывы</strong>
               <span>{isReviewAdmin ? 'админский просмотр включен' : 'помоги улучшить игру'}</span>
