@@ -73,6 +73,10 @@ type Difficulty = {
   startCoins: number;
   startBaseHp: number;
   hpMultiplier: number;
+  rewardMultiplier: number;
+  waveClearBonus: number;
+  buildCellMultiplier: number;
+  towerDecaySeconds: number | null;
   extraEnemies: number;
   maxWaves: number;
 };
@@ -93,11 +97,13 @@ type GameScreen =
   | 'epochLevels'
   | 'difficulty'
   | 'loadout'
+  | 'encyclopedia'
   | 'achievements'
   | 'settings'
   | 'battle';
 type GameMode = 'campaign' | 'timeLoop';
 type TutorialStep = 'selectTower' | 'placeTower' | 'startWave' | 'watchWave' | 'complete';
+type RelicId = 'damage' | 'repair' | 'coins' | 'slow';
 
 type AchievementStats = {
   totalKills: number;
@@ -242,6 +248,7 @@ type Enemy = {
   gravityUntil: number;
   isBoss: boolean;
   isBossServant: boolean;
+  isSecretWave: boolean;
   monsterId: EasyMonsterId | null;
   lastHitAt: number;
   lastHitKind: TowerKind['id'] | null;
@@ -267,6 +274,7 @@ type Tower = {
   lastShotAt: number;
   attackCount: number;
   lastTargetCell: number | null;
+  createdAt: number;
 };
 
 type GameSound = 'enemySpawn' | 'bossSpawn' | 'arrowHit' | 'slowHit' | 'blastHit' | 'waveStart' | 'buttonHover' | 'buttonClick' | 'screenTransition' | 'menuIdle';
@@ -350,6 +358,7 @@ type SettingsFocus = 'top' | 'reviews';
 type DailyChallenge = {
   title: string;
   description: string;
+  kind: 'kills' | 'waves';
   goal: number;
   rewardXp: number;
   getProgress: (profile: RetentionProfile) => number;
@@ -361,6 +370,10 @@ const maxWaves = 40;
 const endlessBossInterval = 5;
 const endlessEraShiftSeconds = 8;
 const baseWaveDuration = 30;
+const secretWaveDuration = 45;
+const secretWaveProbeClicks = 5;
+const secretWaveProbeWindowMs = 4200;
+const secretWaveKinds: EasyMonsterId[] = ['minuteGhost', 'microRift', 'brokenCourier', 'shardRunner', 'clockworkSpider'];
 const skipUnlockDelay = 25;
 const requiredLoadoutSize = 0;
 const starterTowerSlots: TowerSlot[] = ['arrow', null, null, null, null, null];
@@ -548,6 +561,42 @@ function getMissionBattleMap(level: LevelMapItem, mission: EraMission, language:
   };
 }
 
+function applyDifficultyMapRules(map: BattleMapLayout, mode: Difficulty): BattleMapLayout {
+  if (mode.buildCellMultiplier >= 1) return map;
+
+  const minimumBuildCells = Math.max(12, map.highlandCells.length + 5);
+  const targetBuildCount = Math.max(minimumBuildCells, Math.round(map.buildCells.length * mode.buildCellMultiplier));
+  const highlandSet = new Set(map.highlandCells);
+  const keptCells: number[] = [];
+  const optionalCells = map.buildCells
+    .filter((cell) => {
+      if (highlandSet.has(cell)) {
+        keptCells.push(cell);
+        return false;
+      }
+
+      return true;
+    })
+    .map((cell, index) => ({
+      cell,
+      score: (cell * 17 + map.id * 13 + index * 7 + mode.maxWaves) % 100,
+    }))
+    .sort((first, second) => first.score - second.score);
+
+  optionalCells.slice(0, Math.max(0, targetBuildCount - keptCells.length)).forEach(({ cell }) => keptCells.push(cell));
+
+  const keptSet = new Set(keptCells);
+  const buildCells = map.buildCells.filter((cell) => keptSet.has(cell));
+  const buildCellSet = new Set(buildCells);
+
+  return {
+    ...map,
+    description: `${map.description} ${mode.name}: часть платформ нестабильна.`,
+    buildCells,
+    highlandCells: map.highlandCells.filter((cell) => buildCellSet.has(cell)),
+  };
+}
+
 const levelMap: LevelMapItem[] = [
   { id: 1, title: 'Искра времени', mapTitle: 'Каменный век', mapArea: 'stone', chapter: 'Обучение', startWave: 1, description: 'Первые башни и спокойные враги.' },
   { id: 2, title: 'Каменная тропа', mapTitle: 'Античность', mapArea: 'ancient', chapter: 'Обучение', startWave: 4, description: 'Дорога становится длиннее и опаснее.' },
@@ -660,12 +709,43 @@ const languageStorageKey = 'chrono-defense-language';
 const soundEnabledStorageKey = 'chrono-defense-sound-enabled';
 const musicEnabledStorageKey = 'chrono-defense-music-enabled';
 const performanceModeStorageKey = 'chrono-defense-performance-mode';
+const retentionProfileStorageKey = 'chrono-defense-retention-profile';
+const encyclopediaTowerStorageKey = 'chrono-defense-encyclopedia-towers';
+const encyclopediaEnemyStorageKey = 'chrono-defense-encyclopedia-enemies';
 const tutorialBuildCell = 44;
 const movementThreshold = 8;
 const bossEnemyKindId: EasyMonsterId = 'tickingScarab';
 const baseLevelXp = 120;
 const adminReviewEmails = ['aliyyaldiyar@gmail.com'];
 const finalReleaseVersion = 'v1.0 Final';
+const relicWaveInterval = 3;
+const towerRebuildRefundRate = 0.48;
+const waveKillRebuildBonusRate = 0.22;
+const emptyRelicCounts: Record<RelicId, number> = {
+  damage: 0,
+  repair: 0,
+  coins: 0,
+  slow: 0,
+};
+
+const relicCatalog: Record<RelicId, { title: string; description: string }> = {
+  damage: {
+    title: 'Осколок урона',
+    description: '+10% к урону всех башен до конца забега.',
+  },
+  repair: {
+    title: 'Ремонт портала',
+    description: 'Сразу восстанавливает 8 HP базы.',
+  },
+  coins: {
+    title: 'Запас эпохи',
+    description: 'Сразу дает 65 монет на новые башни.',
+  },
+  slow: {
+    title: 'Тяжелое время',
+    description: 'Враги двигаются на 6% медленнее до конца забега.',
+  },
+};
 
 const languageOptions: Array<{ code: LanguageCode; label: string }> = [
   { code: 'ru', label: 'RU' },
@@ -1103,24 +1183,61 @@ const releaseText: Record<LanguageCode, {
   },
 };
 
-const difficultyText: Record<LanguageCode, Record<Difficulty['id'], { name: string; description: string; boss: string }>> = {
+type DifficultyUiText = {
+  name: string;
+  description: string;
+  boss: string;
+  bossLore: string;
+  tactic: string;
+  fact: string;
+};
+
+const difficultyText: Record<LanguageCode, Record<Difficulty['id'], DifficultyUiText>> = {
   ru: {
-    easy: { name: 'Легкая', description: 'Для новичков: больше монет, больше HP базы и спокойные первые волны.', boss: 'Треснувший Хрономант' },
-    experienced: { name: 'Опытный режим', description: 'Для опытных искателей времени: честный баланс без лишней помощи.', boss: 'Повелитель Эпох' },
-    hard: { name: 'Разрыв', description: 'Враги крепче, ошибок меньше, башни нужно ставить точнее.', boss: 'Разлом Сознания' },
-    antiTime: { name: 'Антивремя', description: 'Самый сложный режим: поток времени злится, врагов больше, портал хрупкий.', boss: 'Нулевой Парадокс' },
+    easy: {
+      name: 'Легкая',
+      description: 'Базовый режим уже требует думать: денег меньше, но ошибки еще можно пережить.',
+      boss: 'Треснувший Хрономант',
+      bossLore: 'Сломанный ученик времени. Он проверяет, умеешь ли ты строить первую экономику и закрывать простые маршруты.',
+      tactic: 'Совет: начни со Скаута времени, потом добавь урон по площади около поворотов.',
+      fact: 'Факт: этот режим специально стал сложнее, чтобы первая победа ощущалась заслуженной.',
+    },
+    experienced: {
+      name: 'Опытный режим',
+      description: 'Честный баланс без лишней помощи: ошибки уже заметны, но карта не давит сразу.',
+      boss: 'Повелитель Эпох',
+      bossLore: 'Командир временных армий. Любит длинные волны и заставляет игрока заранее планировать апгрейды.',
+      tactic: 'Совет: смешивай одиночный урон, контроль и экономику, иначе середина боя просадит монеты.',
+      fact: 'Факт: это эталонный режим, от него считается баланс остальных сложностей.',
+    },
+    hard: {
+      name: 'Разрыв',
+      description: 'Враги крепче, но старт честнее: можно построить план, а не проиграть сразу.',
+      boss: 'Разлом Сознания',
+      bossLore: 'Живой разрыв, который ломает привычные схемы. Наказывает за башни, поставленные без роли.',
+      tactic: 'Совет: ставь башни по задачам: контроль быстрых, урон по плотным группам, снайпер по жирным целям.',
+      fact: 'Факт: режим задуман как проверка стратегии, а не реакции на случайный спавн.',
+    },
+    antiTime: {
+      name: 'Антивремя',
+      description: 'Длинная кампания и сильные волны, но первые минуты дают место для стратегии.',
+      boss: 'Нулевой Парадокс',
+      bossLore: 'Финальная ошибка времени. Он не просто атакует портал, а стирает слабые решения игрока.',
+      tactic: 'Совет: не трать все монеты сразу. Нужен запас на апгрейды и ответ на неожиданные типы врагов.',
+      fact: 'Факт: Антивремя стало мягче в начале, чтобы сложность росла через решения, а не через мгновенное поражение.',
+    },
   },
   en: {
-    easy: { name: 'Easy', description: 'For beginners: more coins, more base HP, and calmer first waves.', boss: 'Cracked Chronomancer' },
-    experienced: { name: 'Experienced', description: 'For practiced time seekers: fair balance without extra help.', boss: 'Epoch Lord' },
-    hard: { name: 'Rift', description: 'Enemies are tougher, mistakes hurt more, and tower placement matters more.', boss: 'Mind Rift' },
-    antiTime: { name: 'Anti-Time', description: 'The hardest mode: time flow is angry, enemies are many, and the portal is fragile.', boss: 'Zero Paradox' },
+    easy: { name: 'Easy', description: 'A sharper beginner mode with fewer free resources.', boss: 'Cracked Chronomancer', bossLore: 'A broken time student testing your first economy.', tactic: 'Tip: start with basic damage, then add splash near turns.', fact: 'Fact: Easy was tuned to make the first win feel earned.' },
+    experienced: { name: 'Experienced', description: 'Fair balance without extra help.', boss: 'Epoch Lord', bossLore: 'A commander of time armies who rewards planning.', tactic: 'Tip: mix damage, control, and economy.', fact: 'Fact: this is the baseline mode for balance.' },
+    hard: { name: 'Rift', description: 'Tougher enemies with a fairer start.', boss: 'Mind Rift', bossLore: 'A living rift that punishes towers without a role.', tactic: 'Tip: assign each tower a job.', fact: 'Fact: Rift is meant to test strategy, not luck.' },
+    antiTime: { name: 'Anti-Time', description: 'Long campaign, strong waves, and room to plan early.', boss: 'Zero Paradox', bossLore: 'The final error of time itself.', tactic: 'Tip: keep coins for upgrades and surprises.', fact: 'Fact: Anti-Time now ramps through decisions, not instant defeat.' },
   },
   kk: {
-    easy: { name: 'Жеңіл', description: 'Жаңадан бастаушыларға: көбірек монета, көбірек база HP және тыныш алғашқы толқындар.', boss: 'Жарылған Хрономант' },
-    experienced: { name: 'Тәжірибелі', description: 'Уақыт іздеушілеріне: артық көмексіз әділ баланс.', boss: 'Дәуір Әміршісі' },
-    hard: { name: 'Жарық', description: 'Жаулар мықтырақ, қате аз кешіріледі, мұнараны дәл қою маңызды.', boss: 'Сана Жарығы' },
-    antiTime: { name: 'Антиуақыт', description: 'Ең қиын режим: уақыт ағыны ашулы, жау көп, портал нәзік.', boss: 'Нөлдік Парадокс' },
+    easy: { name: 'Жеңіл', description: 'Бастапқы режим, бірақ ойлануды талап етеді.', boss: 'Жарылған Хрономант', bossLore: 'Уақыттың сынған шәкірті алғашқы қорғанысты тексереді.', tactic: 'Кеңес: алдымен негізгі урон, кейін бұрылыста аймақтық урон.', fact: 'Факт: бірінші жеңіс мағыналы болсын деп режим қиындады.' },
+    experienced: { name: 'Тәжірибелі', description: 'Артық көмексіз әділ баланс.', boss: 'Дәуір Әміршісі', bossLore: 'Жоспарды бағалайтын дәуірлер қолбасшысы.', tactic: 'Кеңес: урон, бақылау және экономиканы араластыр.', fact: 'Факт: бұл негізгі баланс режимі.' },
+    hard: { name: 'Жарық', description: 'Жаулар мықты, бірақ старт әділірек.', boss: 'Сана Жарығы', bossLore: 'Рөлі жоқ мұнараны жазалайтын тірі жарық.', tactic: 'Кеңес: әр мұнараға нақты міндет бер.', fact: 'Факт: бұл режим сәттілік емес, стратегияны тексереді.' },
+    antiTime: { name: 'Антиуақыт', description: 'Ұзақ кампания, күшті толқындар, ерте жоспарға орын бар.', boss: 'Нөлдік Парадокс', bossLore: 'Уақыттың соңғы қатесі.', tactic: 'Кеңес: апгрейд пен тосын қауіпке монета сақта.', fact: 'Факт: Антиуақыт енді бірден жеңілмей, шешім арқылы қиындайды.' },
   },
 };
 
@@ -1277,6 +1394,13 @@ function getPlacementUiLabel(tower: TowerKind, language: LanguageCode) {
 function getChallengeUiText(challenge: DailyChallenge, language: LanguageCode) {
   const t = uiText[language];
 
+  if (language === 'ru') {
+    return {
+      title: challenge.title,
+      description: challenge.description,
+    };
+  }
+
   if (challenge.rewardXp === 1800) {
     return {
       title: t.monthlyTitle,
@@ -1284,15 +1408,22 @@ function getChallengeUiText(challenge: DailyChallenge, language: LanguageCode) {
     };
   }
 
-  if (challenge.rewardXp === 420) {
-    const isWaveChallenge = challenge.goal === 24;
+  if (challenge.rewardXp >= 300 && challenge.rewardXp < 1000) {
+    const isWaveChallenge = challenge.kind === 'waves';
     return {
       title: isWaveChallenge ? t.weeklyWavesTitle : t.weeklyKillsTitle,
       description: fillText(isWaveChallenge ? t.weeklyWavesDescription : t.weeklyKillsDescription, { count: challenge.goal }),
     };
   }
 
-  const isWaveChallenge = challenge.goal === 3 || challenge.goal === 5;
+  if (challenge.rewardXp >= 1000) {
+    return {
+      title: t.monthlyTitle,
+      description: fillText(challenge.kind === 'waves' ? t.weeklyWavesDescription : t.monthlyDescription, { count: challenge.goal }),
+    };
+  }
+
+  const isWaveChallenge = challenge.kind === 'waves';
   return {
     title: isWaveChallenge ? t.dailyWavesTitle : t.dailyKillsTitle,
     description: fillText(isWaveChallenge ? t.dailyWavesDescription : t.dailyKillsDescription, { count: challenge.goal }),
@@ -1860,11 +1991,15 @@ const difficultyModes: Difficulty[] = [
   {
     id: 'easy',
     name: 'Легкая',
-    description: 'Для новичков: больше монет, больше HP базы и спокойные первые волны.',
-    startCoins: 160,
-    startBaseHp: 150,
-    hpMultiplier: 0.85,
-    extraEnemies: 0,
+    description: 'Для новичков, но уже требует думать: денег меньше, ошибки еще прощаются.',
+    startCoins: 125,
+    startBaseHp: 110,
+    hpMultiplier: 0.95,
+    rewardMultiplier: 0.82,
+    waveClearBonus: 24,
+    buildCellMultiplier: 1,
+    towerDecaySeconds: null,
+    extraEnemies: 1,
     maxWaves: 27,
   },
   {
@@ -1874,27 +2009,39 @@ const difficultyModes: Difficulty[] = [
     startCoins: 120,
     startBaseHp: 125,
     hpMultiplier: 1,
+    rewardMultiplier: 0.92,
+    waveClearBonus: 27,
+    buildCellMultiplier: 0.92,
+    towerDecaySeconds: null,
     extraEnemies: 0,
     maxWaves: 33,
   },
   {
     id: 'hard',
     name: 'Разрыв',
-    description: 'Враги крепче, ошибок меньше, башни нужно ставить точнее.',
-    startCoins: 100,
-    startBaseHp: 100,
-    hpMultiplier: 1.22,
-    extraEnemies: 1,
+    description: 'Враги крепче, но старт честнее: можно построить план, а не проиграть сразу.',
+    startCoins: 125,
+    startBaseHp: 115,
+    hpMultiplier: 1.08,
+    rewardMultiplier: 1,
+    waveClearBonus: 28,
+    buildCellMultiplier: 0.78,
+    towerDecaySeconds: null,
+    extraEnemies: 0,
     maxWaves: 40,
   },
   {
     id: 'antiTime',
     name: 'Антивремя',
-    description: 'Самый сложный режим: поток времени злится, врагов больше, портал хрупкий.',
-    startCoins: 85,
-    startBaseHp: 80,
-    hpMultiplier: 1.45,
-    extraEnemies: 2,
+    description: 'Длинная кампания и сильные волны, но первые минуты дают место для стратегии.',
+    startCoins: 115,
+    startBaseHp: 100,
+    hpMultiplier: 1.22,
+    rewardMultiplier: 1.05,
+    waveClearBonus: 30,
+    buildCellMultiplier: 0.68,
+    towerDecaySeconds: 24,
+    extraEnemies: 1,
     maxWaves: 48,
   },
 ];
@@ -1919,6 +2066,25 @@ const bossProfiles: Record<Difficulty['id'], BossProfile> = {
     name: 'Нулевой Парадокс',
     sprite: bossZeroParadoxSprite,
     portraitClass: 'boss-zero-paradox',
+  },
+};
+
+const bossDefeatTaunts: Record<Difficulty['id'], { title: string; line: string }> = {
+  easy: {
+    title: 'Хрономант смеется',
+    line: 'Вот это защита линии времени? Позорники. Даже мои треснувшие часы держатся дольше.',
+  },
+  experienced: {
+    title: 'Повелитель Эпох доволен',
+    line: 'Вы сдали эпоху за эпохой. Запомните этот провал: история не любит слабых защитников.',
+  },
+  hard: {
+    title: 'Разлом Сознания давит',
+    line: 'Слышите тишину? Это ваша стратегия развалилась. Позорники, вы сами открыли мне дорогу.',
+  },
+  antiTime: {
+    title: 'Нулевой Парадокс насмехается',
+    line: 'Вы думали победить анти-время? Смешно. Ваше поражение уже было записано до начала боя.',
   },
 };
 
@@ -2045,7 +2211,7 @@ function createEnemy(kindId: EasyMonsterId, wave: number, difficultyData: Diffic
     hp: maxHp,
     maxHp,
     speed: kind.speed,
-    reward: Math.round(kind.reward * (1 + wave * 0.025)),
+    reward: Math.max(4, Math.round(kind.reward * difficultyData.rewardMultiplier * (1 + wave * 0.018))),
     moveCharge: 0,
     createdAt: now,
     speedBoostUntil: 0,
@@ -2058,10 +2224,23 @@ function createEnemy(kindId: EasyMonsterId, wave: number, difficultyData: Diffic
     gravityUntil: 0,
     isBoss: false,
     isBossServant: false,
+    isSecretWave: false,
     monsterId: kindId,
     lastHitAt: 0,
     lastHitKind: null,
     lastDamage: 0,
+  };
+}
+
+function createSecretWaveEnemy(kindId: EasyMonsterId, wave: number, difficultyData: Difficulty, idSeed: number, now: number): Enemy {
+  const enemy = createEnemy(kindId, wave, difficultyData, idSeed, now, 1.35);
+
+  return {
+    ...enemy,
+    speed: enemy.speed + 0.35,
+    reward: Math.round(enemy.reward * 1.7),
+    isSecretWave: true,
+    speedBoostUntil: now + 1500,
   };
 }
 
@@ -2204,6 +2383,36 @@ function getSellRefund(tower: Tower) {
   return Math.round(tower.invested * 0.5);
 }
 
+function decayOneTower(towers: Tower[]) {
+  if (towers.length === 0) return { towers, changed: false, towerName: '' };
+
+  const target = [...towers].sort((first, second) => first.createdAt - second.createdAt || second.invested - first.invested)[0];
+  const towerName = getTowerKind(target.kind).name;
+
+  if (target.level > 1) {
+    return {
+      changed: true,
+      towerName,
+      towers: towers.map((tower) =>
+        tower.id === target.id
+          ? {
+              ...tower,
+              level: tower.level - 1,
+              invested: Math.max(getTowerKind(tower.kind).cost, Math.round(tower.invested * 0.72)),
+              lastShotAt: 0,
+            }
+          : tower,
+      ),
+    };
+  }
+
+  return {
+    changed: true,
+    towerName,
+    towers: towers.filter((tower) => tower.id !== target.id),
+  };
+}
+
 function getAttackSeconds(cooldown: number) {
   return (cooldown / 1000).toFixed(2);
 }
@@ -2255,7 +2464,11 @@ function getArchiveXpBonus(towers: Tower[]) {
 
 function getLandscapeRefund(towers: Tower[]) {
   const invested = towers.reduce((total, tower) => total + tower.invested, 0);
-  return Math.round(invested * 1.2);
+  return Math.round(invested * towerRebuildRefundRate);
+}
+
+function getWaveKillRebuildBonus(killCoins: number) {
+  return Math.round(killCoins * waveKillRebuildBonusRate);
 }
 
 function getTargetPriorityName(priority: TargetPriority) {
@@ -2624,12 +2837,21 @@ function getNextLevelXp(level: number) {
   return level * level * baseLevelXp;
 }
 
+function getStableIndex(key: string, length: number) {
+  let hash = 0;
+  for (let index = 0; index < key.length; index += 1) {
+    hash = (hash * 31 + key.charCodeAt(index)) % 2147483647;
+  }
+
+  return Math.abs(hash) % length;
+}
+
 function getDailyChallenge(dateKey: string): DailyChallenge {
-  const dayNumber = Math.floor(Date.parse(dateKey) / (24 * 60 * 60 * 1000));
   const challenges: DailyChallenge[] = [
     {
       title: 'Охота дня',
       description: 'Победи 35 мобов сегодня.',
+      kind: 'kills',
       goal: 35,
       rewardXp: 100,
       getProgress: (profile) => profile.daily_kills,
@@ -2637,6 +2859,7 @@ function getDailyChallenge(dateKey: string): DailyChallenge {
     {
       title: 'Дежурство у портала',
       description: 'Отбей 3 волны сегодня.',
+      kind: 'waves',
       goal: 3,
       rewardXp: 100,
       getProgress: (profile) => profile.daily_waves,
@@ -2644,6 +2867,7 @@ function getDailyChallenge(dateKey: string): DailyChallenge {
     {
       title: 'Короткая смена',
       description: 'Победи 20 мобов сегодня.',
+      kind: 'kills',
       goal: 20,
       rewardXp: 100,
       getProgress: (profile) => profile.daily_kills,
@@ -2651,21 +2875,54 @@ function getDailyChallenge(dateKey: string): DailyChallenge {
     {
       title: 'Три удара времени',
       description: 'Отбей 5 волн сегодня.',
+      kind: 'waves',
       goal: 5,
       rewardXp: 100,
       getProgress: (profile) => profile.daily_waves,
     },
+    {
+      title: 'Чистая дорога',
+      description: 'Победи 50 мобов сегодня.',
+      kind: 'kills',
+      goal: 50,
+      rewardXp: 130,
+      getProgress: (profile) => profile.daily_kills,
+    },
+    {
+      title: 'Смена защитника',
+      description: 'Отбей 7 волн сегодня.',
+      kind: 'waves',
+      goal: 7,
+      rewardXp: 130,
+      getProgress: (profile) => profile.daily_waves,
+    },
+    {
+      title: 'Быстрая зачистка',
+      description: 'Победи 28 мобов сегодня.',
+      kind: 'kills',
+      goal: 28,
+      rewardXp: 90,
+      getProgress: (profile) => profile.daily_kills,
+    },
+    {
+      title: 'Проверка портала',
+      description: 'Отбей 4 волны сегодня.',
+      kind: 'waves',
+      goal: 4,
+      rewardXp: 110,
+      getProgress: (profile) => profile.daily_waves,
+    },
   ];
 
-  return challenges[dayNumber % challenges.length];
+  return challenges[getStableIndex(`daily-${dateKey}`, challenges.length)];
 }
 
 function getWeeklyChallenge(weekKey: string): DailyChallenge {
-  const weekNumber = Math.floor(Date.parse(weekKey) / (7 * 24 * 60 * 60 * 1000));
   const challenges: DailyChallenge[] = [
     {
       title: 'Недельный гарнизон',
       description: 'Отбей 24 волны за неделю.',
+      kind: 'waves',
       goal: 24,
       rewardXp: 420,
       getProgress: (profile) => profile.weekly_waves,
@@ -2673,23 +2930,85 @@ function getWeeklyChallenge(weekKey: string): DailyChallenge {
     {
       title: 'Операция разлом',
       description: 'Победи 320 мобов за неделю.',
+      kind: 'kills',
       goal: 320,
       rewardXp: 420,
       getProgress: (profile) => profile.weekly_kills,
     },
+    {
+      title: 'Страж недели',
+      description: 'Отбей 36 волн за неделю.',
+      kind: 'waves',
+      goal: 36,
+      rewardXp: 520,
+      getProgress: (profile) => profile.weekly_waves,
+    },
+    {
+      title: 'Большая зачистка',
+      description: 'Победи 500 мобов за неделю.',
+      kind: 'kills',
+      goal: 500,
+      rewardXp: 540,
+      getProgress: (profile) => profile.weekly_kills,
+    },
+    {
+      title: 'Стабилизатор эпох',
+      description: 'Отбей 18 волн за неделю.',
+      kind: 'waves',
+      goal: 18,
+      rewardXp: 340,
+      getProgress: (profile) => profile.weekly_waves,
+    },
+    {
+      title: 'Полевой охотник',
+      description: 'Победи 240 мобов за неделю.',
+      kind: 'kills',
+      goal: 240,
+      rewardXp: 360,
+      getProgress: (profile) => profile.weekly_kills,
+    },
   ];
 
-  return challenges[weekNumber % challenges.length];
+  return challenges[getStableIndex(`weekly-${weekKey}`, challenges.length)];
 }
 
-function getMonthlyChallenge(_monthKey: string): DailyChallenge {
-  return {
-    title: 'Супер-пупер марафон времени',
-    description: 'За месяц победи 1800 мобов и докажи, что портал под контролем.',
-    goal: 1800,
-    rewardXp: 1800,
-    getProgress: (profile) => profile.monthly_kills,
-  };
+function getMonthlyChallenge(monthKey: string): DailyChallenge {
+  const challenges: DailyChallenge[] = [
+    {
+      title: 'Супер-пупер марафон времени',
+      description: 'За месяц победи 1800 мобов и докажи, что портал под контролем.',
+      kind: 'kills',
+      goal: 1800,
+      rewardXp: 1800,
+      getProgress: (profile) => profile.monthly_kills,
+    },
+    {
+      title: 'Месяц защитника',
+      description: 'За месяц отбей 120 волн.',
+      kind: 'waves',
+      goal: 120,
+      rewardXp: 1700,
+      getProgress: (profile) => profile.monthly_waves,
+    },
+    {
+      title: 'Хроно-марафон',
+      description: 'За месяц победи 2400 мобов.',
+      kind: 'kills',
+      goal: 2400,
+      rewardXp: 2200,
+      getProgress: (profile) => profile.monthly_kills,
+    },
+    {
+      title: 'Длинная оборона',
+      description: 'За месяц отбей 90 волн.',
+      kind: 'waves',
+      goal: 90,
+      rewardXp: 1400,
+      getProgress: (profile) => profile.monthly_waves,
+    },
+  ];
+
+  return challenges[getStableIndex(`monthly-${monthKey}`, challenges.length)];
 }
 
 function refreshRetentionForToday(profile: RetentionProfile, todayKey = getTodayKey()) {
@@ -2768,6 +3087,49 @@ function readAchievementStats() {
   }
 }
 
+function normalizeRetentionProfileData(profile: Partial<RetentionProfile>, fallbackName: string, profileUserId = ''): RetentionProfile {
+  return refreshRetentionForToday({
+    ...emptyRetentionProfile,
+    user_id: profileUserId,
+    display_name: profile.display_name ?? fallbackName,
+    xp: profile.xp ?? 0,
+    streak_days: profile.streak_days ?? 0,
+    last_check_in_date: profile.last_check_in_date ?? null,
+    best_wave: profile.best_wave ?? 0,
+    total_kills: profile.total_kills ?? 0,
+    daily_challenge_date: profile.daily_challenge_date ?? null,
+    daily_kills: profile.daily_kills ?? 0,
+    daily_waves: profile.daily_waves ?? 0,
+    daily_completed: profile.daily_completed ?? false,
+    weekly_challenge_date: profile.weekly_challenge_date ?? null,
+    weekly_kills: profile.weekly_kills ?? 0,
+    weekly_waves: profile.weekly_waves ?? 0,
+    weekly_completed: profile.weekly_completed ?? false,
+    monthly_challenge_date: profile.monthly_challenge_date ?? null,
+    monthly_kills: profile.monthly_kills ?? 0,
+    monthly_waves: profile.monthly_waves ?? 0,
+    monthly_completed: profile.monthly_completed ?? false,
+    completed_level_ids: normalizeCompletedLevelIds(profile.completed_level_ids),
+    achievement_stats: normalizeAchievementStats(profile.achievement_stats),
+  });
+}
+
+function readSavedRetentionProfile(fallbackName: string, profileUserId = '') {
+  const savedProfile = window.localStorage.getItem(retentionProfileStorageKey);
+  if (!savedProfile) return normalizeRetentionProfileData({}, fallbackName, profileUserId);
+
+  try {
+    const parsedProfile: unknown = JSON.parse(savedProfile);
+    if (!parsedProfile || typeof parsedProfile !== 'object') {
+      return normalizeRetentionProfileData({}, fallbackName, profileUserId);
+    }
+
+    return normalizeRetentionProfileData(parsedProfile as Partial<RetentionProfile>, fallbackName, profileUserId);
+  } catch {
+    return normalizeRetentionProfileData({}, fallbackName, profileUserId);
+  }
+}
+
 function normalizeAchievementStats(stats: unknown): AchievementStats {
   if (!stats || typeof stats !== 'object') return emptyAchievementStats;
 
@@ -2814,6 +3176,18 @@ function readSavedBoolean(storageKey: string, fallback: boolean) {
   return savedValue === 'true';
 }
 
+function readSavedStringArray(storageKey: string, fallback: string[] = []) {
+  const savedValue = window.localStorage.getItem(storageKey);
+  if (!savedValue) return fallback;
+
+  try {
+    const parsedValue: unknown = JSON.parse(savedValue);
+    return Array.isArray(parsedValue) ? parsedValue.filter((item): item is string => typeof item === 'string') : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function savePlayerName(name: string) {
   const cleanName = name.trim();
   if (cleanName) {
@@ -2841,7 +3215,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const [completedLevelIds, setCompletedLevelIds] = useState<number[]>(readCompletedLevelIds);
   const [achievementStats, setAchievementStats] = useState<AchievementStats>(readAchievementStats);
   const [retentionProfile, setRetentionProfile] = useState<RetentionProfile>(() =>
-    refreshRetentionForToday({ ...emptyRetentionProfile, user_id: userId ?? '', display_name: userEmail || 'Игрок' }),
+    readSavedRetentionProfile(userEmail || 'Игрок', userId ?? ''),
   );
   const [leaderboard, setLeaderboard] = useState<RetentionLeaderboardEntry[]>([]);
   const [reviews, setReviews] = useState<PlayerReview[]>([]);
@@ -2861,6 +3235,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const selectedDifficultyData = difficultyModes.find((mode) => mode.id === difficulty) ?? difficultyModes[0];
   const selectedMaxWaves = selectedDifficultyData.maxWaves;
   const selectedBossProfile = bossProfiles[difficulty];
+  const selectedBossTaunt = bossDefeatTaunts[difficulty];
   const isTimeLoopMode = gameMode === 'timeLoop';
   const [eraIndex, setEraIndex] = useState(0);
   const [wave, setWave] = useState(1);
@@ -2875,6 +3250,20 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const [spawnedCount, setSpawnedCount] = useState(0);
   const [isWaveRunning, setIsWaveRunning] = useState(false);
   const [isVictory, setIsVictory] = useState(false);
+  const [secretWaveReady, setSecretWaveReady] = useState(false);
+  const [isSecretWaveActive, setIsSecretWaveActive] = useState(false);
+  const [hpDamagePulse, setHpDamagePulse] = useState(false);
+  const [relicCounts, setRelicCounts] = useState<Record<RelicId, number>>(emptyRelicCounts);
+  const [pendingRelicChoices, setPendingRelicChoices] = useState<RelicId[]>([]);
+  const [bossCutsceneWave, setBossCutsceneWave] = useState<number | null>(null);
+  const [shownBossCutsceneKeys, setShownBossCutsceneKeys] = useState<string[]>([]);
+  const [discoveredTowerIds, setDiscoveredTowerIds] = useState<TowerKind['id'][]>(() => {
+    const savedIds = readSavedStringArray(encyclopediaTowerStorageKey);
+    return Array.from(new Set([...freeTowerIds, ...savedIds.filter((id): id is TowerKind['id'] => availableTowerKinds.some((tower) => tower.id === id))]));
+  });
+  const [discoveredEnemyIds, setDiscoveredEnemyIds] = useState<EasyMonsterId[]>(() =>
+    readSavedStringArray(encyclopediaEnemyStorageKey).filter((id): id is EasyMonsterId => easyMonsterIds.includes(id as EasyMonsterId)),
+  );
   const [waveTimeLeft, setWaveTimeLeft] = useState(getWaveDuration(1));
   const [message, setMessage] = useState('Поставь башни и запусти первую волну.');
   const [commentatorMessage, setCommentatorMessage] = useState('');
@@ -2894,6 +3283,10 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const windowTransitionTimersRef = useRef<number[]>([]);
   const commentatorRequestRef = useRef(0);
   const runChallengeRef = useRef({ tookDamage: false, skippedWave: false });
+  const secretWaveProbeRef = useRef({ clicks: 0, lastClickAt: 0 });
+  const hpDamagePulseTimerRef = useRef<number | null>(null);
+  const nextTowerDecayAtRef = useRef(0);
+  const waveKillCoinsRef = useRef(0);
   const previousXpRef = useRef(retentionProfile.xp);
   const cameraDragRef = useRef({
     active: false,
@@ -2920,8 +3313,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   const selectedMissionStartWave = isTimeLoopMode ? 1 : Math.min(selectedMaxWaves, selectedLevel.startWave + selectedEraMission.startWaveOffset);
   const selectedProgressLevelId = selectedLevel.id * 10 + selectedEraMission.id;
   const selectedBattleMap = useMemo(
-    () => getMissionBattleMap(selectedLevel, selectedEraMission, language),
-    [language, selectedEraMission, selectedLevel],
+    () => applyDifficultyMapRules(getMissionBattleMap(selectedLevel, selectedEraMission, language), selectedDifficultyData),
+    [language, selectedDifficultyData, selectedEraMission, selectedLevel],
   );
   const boardCells = useMemo(() => Array.from({ length: boardSize * boardSize }, (_, cell) => cell), []);
   const battleCellSets = useMemo(
@@ -2932,13 +3325,20 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     }),
     [selectedBattleMap],
   );
-  const hasFinalBossInCurrentWave = isBossWave(wave, gameMode, selectedMaxWaves, isTimeLoopMode || isFinalCampaignMission);
-  const hasBossServantInCurrentWave = isBossServantWave(wave, gameMode, selectedMaxWaves, isFinalCampaignMission);
-  const enemiesInCurrentWave = 5 + Math.ceil(wave * 1.45) + selectedDifficultyData.extraEnemies + (hasFinalBossInCurrentWave || hasBossServantInCurrentWave ? 1 : 0);
-  const waveElapsedSeconds = Math.max(0, getWaveDuration(wave, gameMode, selectedMaxWaves) - waveTimeLeft);
+  const hasFinalBossInCurrentWave = !isSecretWaveActive && isBossWave(wave, gameMode, selectedMaxWaves, isTimeLoopMode || isFinalCampaignMission);
+  const hasBossServantInCurrentWave = !isSecretWaveActive && isBossServantWave(wave, gameMode, selectedMaxWaves, isFinalCampaignMission);
+  const regularEnemiesInCurrentWave = isSecretWaveActive ? 9 + Math.ceil(wave * 1.1) : 5 + Math.ceil(wave * 1.45) + selectedDifficultyData.extraEnemies;
+  const enemiesInCurrentWave = regularEnemiesInCurrentWave + (hasFinalBossInCurrentWave || hasBossServantInCurrentWave ? 1 : 0);
+  const currentWaveDuration = isSecretWaveActive ? secretWaveDuration : getWaveDuration(wave, gameMode, selectedMaxWaves);
+  const waveElapsedSeconds = Math.max(0, currentWaveDuration - waveTimeLeft);
   const waveLimitLabel = isTimeLoopMode ? '∞' : String(selectedMaxWaves);
   const skipSecondsLeft = Math.max(0, skipUnlockDelay - waveElapsedSeconds);
-  const canSkipWave = isWaveRunning && skipSecondsLeft === 0 && baseHp > 0 && !isVictory;
+  const canSkipWave = isWaveRunning && !isSecretWaveActive && skipSecondsLeft === 0 && baseHp > 0 && !isVictory;
+  const isCriticalBaseHp = screen === 'battle' && baseHp > 0 && baseHp <= 10;
+  const relicDamageMultiplier = 1 + relicCounts.damage * 0.1;
+  const relicEnemySpeedMultiplier = Math.max(0.62, 1 - relicCounts.slow * 0.06);
+  const discoveredTowerSet = useMemo(() => new Set<TowerKind['id']>(discoveredTowerIds), [discoveredTowerIds]);
+  const discoveredEnemySet = useMemo(() => new Set<EasyMonsterId>(discoveredEnemyIds), [discoveredEnemyIds]);
   const t = uiText[language];
   const finalText = releaseText[language];
   const selectedLevelUi = getLevelUiText(selectedLevel, language);
@@ -2980,6 +3380,58 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     }
 
     return audioContext;
+  }
+
+  function triggerHpDamagePulse() {
+    setHpDamagePulse(false);
+    window.requestAnimationFrame(() => setHpDamagePulse(true));
+
+    if (hpDamagePulseTimerRef.current) {
+      window.clearTimeout(hpDamagePulseTimerRef.current);
+    }
+
+    hpDamagePulseTimerRef.current = window.setTimeout(() => {
+      setHpDamagePulse(false);
+      hpDamagePulseTimerRef.current = null;
+    }, 760);
+  }
+
+  function discoverTower(kind: TowerKind['id']) {
+    setDiscoveredTowerIds((current) => (current.includes(kind) ? current : [...current, kind]));
+  }
+
+  function discoverEnemies(kinds: EasyMonsterId[]) {
+    if (kinds.length === 0) return;
+
+    setDiscoveredEnemyIds((current) => {
+      const nextIds = new Set<EasyMonsterId>(current);
+      kinds.forEach((kind) => nextIds.add(kind));
+      return nextIds.size === current.length ? current : Array.from(nextIds);
+    });
+  }
+
+  function getRelicChoicesForWave(completedWave: number): RelicId[] {
+    const relicIds: RelicId[] = ['damage', 'repair', 'coins', 'slow'];
+    return Array.from({ length: 3 }, (_, index) => relicIds[(completedWave + index) % relicIds.length]);
+  }
+
+  function chooseRelic(relicId: RelicId) {
+    setPendingRelicChoices([]);
+    setRelicCounts((current) => ({ ...current, [relicId]: current[relicId] + 1 }));
+
+    if (relicId === 'repair') {
+      setBaseHp((current) => Math.min(selectedDifficultyData.startBaseHp, current + 8));
+      setMessage('Реликвия активна: портал восстановил 8 HP базы.');
+      return;
+    }
+
+    if (relicId === 'coins') {
+      setCoins((current) => current + 65);
+      setMessage('Реликвия активна: запас эпохи принес 65 монет.');
+      return;
+    }
+
+    setMessage(`Реликвия активна: ${relicCatalog[relicId].description}`);
   }
 
   function startBackgroundMusic() {
@@ -3254,8 +3706,12 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       const savedName = readSavedPlayerName();
 
       if (!userId || !supabase) {
+        const localProfile = readSavedRetentionProfile(savedName || userEmail || 'Гость', userId ?? '');
+        previousXpRef.current = localProfile.xp;
         setRetentionLoading(false);
-        setRetentionProfile(refreshRetentionForToday({ ...emptyRetentionProfile, display_name: userEmail || 'Гость' }));
+        setRetentionProfile(localProfile);
+        setCompletedLevelIds(localProfile.completed_level_ids);
+        setAchievementStats(localProfile.achievement_stats);
         if (savedName) {
           setPlayerName(savedName);
         }
@@ -3300,6 +3756,9 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   useEffect(() => {
     return () => {
       windowTransitionTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      if (hpDamagePulseTimerRef.current) {
+        window.clearTimeout(hpDamagePulseTimerRef.current);
+      }
       stopBackgroundMusic(backgroundMusicRef.current);
       backgroundMusicRef.current = null;
     };
@@ -3325,6 +3784,26 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
   useEffect(() => {
     window.localStorage.setItem(performanceModeStorageKey, String(performanceMode));
   }, [performanceMode]);
+
+  useEffect(() => {
+    window.localStorage.setItem(encyclopediaTowerStorageKey, JSON.stringify(discoveredTowerIds));
+  }, [discoveredTowerIds]);
+
+  useEffect(() => {
+    window.localStorage.setItem(encyclopediaEnemyStorageKey, JSON.stringify(discoveredEnemyIds));
+  }, [discoveredEnemyIds]);
+
+  useEffect(() => {
+    window.localStorage.setItem(retentionProfileStorageKey, JSON.stringify(retentionProfile));
+  }, [retentionProfile]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setRetentionProfile((current) => applyTimedChallengeRewards(refreshRetentionForToday(current)));
+    }, 60000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const previousXp = previousXpRef.current;
@@ -3452,6 +3931,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         if (current > 1) return current - 1;
 
         setIsWaveRunning(false);
+        setIsSecretWaveActive(false);
         setEnemies([]);
         setSpawnedCount(0);
         if (!isTimeLoopMode && wave >= selectedMaxWaves) {
@@ -3462,6 +3942,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
         setMessage(`Время волны ${wave} закончилось. Готовься к следующей.`);
         const refund = getLandscapeRefund(towers);
+        const killBonus = getWaveKillRebuildBonus(waveKillCoinsRef.current);
         setTowers([]);
         setSelectedTowerId(null);
         setWave((currentWave) => (isTimeLoopMode ? currentWave + 1 : Math.min(selectedMaxWaves, currentWave + 1)));
@@ -3470,26 +3951,27 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           setSelectedLevelId((currentLevelId) => (currentLevelId % levelMap.length) + 1);
           setSelectedEraMissionId((currentMissionId) => (currentMissionId % 5) + 1);
         }
-        setCoins((currentCoins) => currentCoins + 20 + refund);
-        setMessage(`Ландшафт изменился. Башни разобраны, возвращено ${refund} монет.`);
+        setCoins((currentCoins) => currentCoins + selectedDifficultyData.waveClearBonus + refund + killBonus);
+        waveKillCoinsRef.current = 0;
+        setMessage(`Пересборка: башни исчезли. Возврат ${refund} монет + бонус за убийства ${killBonus}.`);
         return 0;
       });
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [isTimeLoopMode, isWaveRunning, selectedMaxWaves, towers, wave]);
+  }, [isTimeLoopMode, isWaveRunning, selectedDifficultyData.waveClearBonus, selectedMaxWaves, towers, wave]);
 
   useEffect(() => {
     if (!isWaveRunning) return;
 
     let spawned = 0;
-      const regularEnemies = 5 + Math.ceil(wave * 1.45) + selectedDifficultyData.extraEnemies;
+      const regularEnemies = isSecretWaveActive ? 9 + Math.ceil(wave * 1.1) : 5 + Math.ceil(wave * 1.45) + selectedDifficultyData.extraEnemies;
       const spawnTimer = window.setInterval(() => {
         spawned += 1;
-        const boss = hasFinalBossInCurrentWave && spawned > regularEnemies;
-        const servant = hasBossServantInCurrentWave && spawned > regularEnemies;
+        const boss = !isSecretWaveActive && hasFinalBossInCurrentWave && spawned > regularEnemies;
+        const servant = !isSecretWaveActive && hasBossServantInCurrentWave && spawned > regularEnemies;
         const now = Date.now();
-        const kindId = boss || servant ? bossEnemyKindId : chooseEnemyKind(wave, spawned);
+        const kindId = isSecretWaveActive ? secretWaveKinds[(spawned + wave) % secretWaveKinds.length] : boss || servant ? bossEnemyKindId : chooseEnemyKind(wave, spawned);
         const groupSize = !boss && !servant && kindId === 'sandPincers' ? 5 : 1;
         const servantProgress = Math.min(1, wave / selectedMaxWaves);
         const spawnedEnemies = Array.from({ length: groupSize }, (_, index) =>
@@ -3497,7 +3979,9 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
             ? createBossEnemy(wave, selectedDifficultyData, now + spawned + index, now)
             : servant
               ? createBossServantEnemy(wave, selectedDifficultyData, now + spawned + index, now, servantProgress)
-            : createEnemy(kindId, wave, selectedDifficultyData, now + spawned + index, now),
+              : isSecretWaveActive
+                ? createSecretWaveEnemy(kindId, wave, selectedDifficultyData, now + spawned + index, now)
+                : createEnemy(kindId, wave, selectedDifficultyData, now + spawned + index, now),
         );
 
       playSound(boss || servant ? 'bossSpawn' : 'enemySpawn');
@@ -3510,7 +3994,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     }, 780);
 
     return () => window.clearInterval(spawnTimer);
-  }, [difficulty, gameMode, hasBossServantInCurrentWave, hasFinalBossInCurrentWave, isWaveRunning, selectedDifficultyData.extraEnemies, selectedDifficultyData.hpMultiplier, selectedMaxWaves, wave]);
+  }, [difficulty, gameMode, hasBossServantInCurrentWave, hasFinalBossInCurrentWave, isSecretWaveActive, isWaveRunning, selectedDifficultyData.extraEnemies, selectedDifficultyData.hpMultiplier, selectedMaxWaves, wave]);
 
   useEffect(() => {
     if (!isWaveRunning) return;
@@ -3523,6 +4007,16 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       let defeatedBosses = 0;
       let completedWaveCount = 0;
       let nextTowers = towers;
+
+      if (selectedDifficultyData.towerDecaySeconds && towers.length > 0 && now >= nextTowerDecayAtRef.current) {
+        const decay = decayOneTower(towers);
+        if (decay.changed) {
+          nextTowers = decay.towers;
+          setSelectedTowerId((currentId) => (currentId && decay.towers.some((tower) => tower.id === currentId) ? currentId : null));
+          setMessage(`Антивремя разъедает башни: ${decay.towerName} потеряла стабильность.`);
+        }
+        nextTowerDecayAtRef.current = now + selectedDifficultyData.towerDecaySeconds * 1000;
+      }
 
       setEnemies((currentEnemies) => {
         let nextEnemies = currentEnemies.map((enemy) => {
@@ -3569,7 +4063,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
             };
           }
 
-          const moveCharge = nextEnemy.moveCharge + getEnemySpeed(nextEnemy, now);
+          const moveCharge = nextEnemy.moveCharge + getEnemySpeed(nextEnemy, now) * relicEnemySpeedMultiplier;
           const stepsToMove = Math.floor(moveCharge / movementThreshold);
           return {
             ...nextEnemy,
@@ -3581,9 +4075,10 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
           nextEnemies = nextEnemies.map((enemy) => (enemy.isBoss ? enemy : { ...enemy, speedBoostUntil: now + 2500 }));
         }
 
-        nextTowers = towers.map((tower) => {
+        const activeTowers = nextTowers;
+        nextTowers = activeTowers.map((tower) => {
           const stats = getTowerStats(tower);
-          const cooldown = stats.cooldown * getTowerSlowMultiplier(tower, nextEnemies, now, selectedBattleMap.pathCells) * getForgeCooldownMultiplier(tower, towers);
+          const cooldown = stats.cooldown * getTowerSlowMultiplier(tower, nextEnemies, now, selectedBattleMap.pathCells) * getForgeCooldownMultiplier(tower, activeTowers);
           if (now - tower.lastShotAt < cooldown) {
             return tower;
           }
@@ -3623,13 +4118,13 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                         : 0.68;
             const baseDamage =
               stats.id === 'mirror'
-                ? getMirrorCopiedDamage(tower, towers)
+                ? getMirrorCopiedDamage(tower, activeTowers)
                 : stats.id === 'blast' && enemy.isBoss
                   ? Math.round(stats.damage * 1.3)
                   : stats.id === 'paradox' && enemy.isBoss
                     ? Math.round(stats.damage * (1.15 + tower.level * 0.08))
                   : stats.damage;
-            const boostedDamage = Math.round(baseDamage * getTowerDamageMultiplier(tower, towers));
+            const boostedDamage = Math.round(baseDamage * getTowerDamageMultiplier(tower, activeTowers) * relicDamageMultiplier);
             const rawDamage = Math.round(boostedDamage * splashMultiplier);
             const damage = isImmune ? 0 : getDamageAfterResistance(enemy, stats.id, rawDamage);
             const paradoxExecuteThreshold = 0.16 + tower.level * 0.03;
@@ -3685,6 +4180,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
         const spawnedByDeaths: Enemy[] = [];
         const defeatedEnemies = nextEnemies.filter((enemy) => enemy.hp <= 0);
+        discoverEnemies(defeatedEnemies.map((enemy) => enemy.kind));
         defeatedEnemies.forEach((enemy) => {
           if (enemy.kind === 'tickingScarab') {
             nextEnemies = nextEnemies.map((item) =>
@@ -3709,7 +4205,9 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
         const aliveEnemies = nextEnemies.filter((enemy) => {
           if (enemy.hp <= 0) {
-            coinsEarned += enemy.reward + getArchiveRewardBonus(enemy, towers, selectedBattleMap.pathCells);
+            const killReward = enemy.reward + getArchiveRewardBonus(enemy, activeTowers, selectedBattleMap.pathCells);
+            coinsEarned += killReward;
+            waveKillCoinsRef.current += killReward;
             defeatedCount += 1;
             if (enemy.isBoss) defeatedBosses += 1;
             return false;
@@ -3723,6 +4221,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
         if (escapedDamage > 0) {
           runChallengeRef.current.tookDamage = true;
+          triggerHpDamagePulse();
         }
 
         if (escapedDamage >= baseHp) {
@@ -3736,16 +4235,18 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         if (aliveEnemies.length === 0 && spawnedCount >= enemiesInCurrentWave) {
           completedWaveCount += 1;
           setIsWaveRunning(false);
+          setIsSecretWaveActive(false);
           setWaveTimeLeft(0);
           if (!isTimeLoopMode && wave >= selectedMaxWaves) {
             setIsVictory(true);
             setMessage('Победа! Ты отбил финальную волну и спас портал времени.');
-            setCoins((current) => current + 80 + coinsEarned);
+            setCoins((current) => current + selectedDifficultyData.waveClearBonus * 2 + coinsEarned);
             return aliveEnemies;
           }
 
-          setMessage(`Волна ${wave} отбита. Время двигается дальше.`);
-          const refund = getLandscapeRefund(towers);
+          const towersBeforeRebuild = nextTowers;
+          const refund = getLandscapeRefund(towersBeforeRebuild);
+          const killBonus = getWaveKillRebuildBonus(waveKillCoinsRef.current);
           nextTowers = [];
           setSelectedTowerId(null);
           setWave((current) => (isTimeLoopMode ? current + 1 : Math.min(selectedMaxWaves, current + 1)));
@@ -3754,8 +4255,12 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
             setSelectedLevelId((currentLevelId) => (currentLevelId % levelMap.length) + 1);
             setSelectedEraMissionId((currentMissionId) => (currentMissionId % 5) + 1);
           }
-          setCoins((current) => current + 35 + coinsEarned + refund);
-          setMessage(`Ландшафт изменился. Башни разобраны, возвращено ${refund} монет.`);
+          setCoins((current) => current + selectedDifficultyData.waveClearBonus + coinsEarned + refund + killBonus);
+          waveKillCoinsRef.current = 0;
+          if (!practiceTutorialActive && wave % relicWaveInterval === 0) {
+            setPendingRelicChoices(getRelicChoicesForWave(wave));
+          }
+          setMessage(`Пересборка: башни исчезли. Возврат ${refund} монет + бонус за убийства ${killBonus}.`);
         } else {
           setCoins((current) => current + coinsEarned);
         }
@@ -3807,7 +4312,23 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     }, 650);
 
     return () => window.clearInterval(battleTimer);
-  }, [baseHp, enemiesInCurrentWave, isTimeLoopMode, isWaveRunning, practiceTutorialActive, selectedBattleMap.pathCells, selectedMaxWaves, spawnedCount, towers, tutorialStep, wave]);
+  }, [
+    baseHp,
+    enemiesInCurrentWave,
+    isTimeLoopMode,
+    isWaveRunning,
+    practiceTutorialActive,
+    relicDamageMultiplier,
+    relicEnemySpeedMultiplier,
+    selectedBattleMap.pathCells,
+    selectedDifficultyData.towerDecaySeconds,
+    selectedDifficultyData.waveClearBonus,
+    selectedMaxWaves,
+    spawnedCount,
+    towers,
+    tutorialStep,
+    wave,
+  ]);
 
   useEffect(() => {
     if (!isTimeLoopMode || !isWaveRunning || screen !== 'battle') return;
@@ -4019,6 +4540,8 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       setMessage(`${getTowerKind(kind).name} куплен на рынке за ${marketPrice} монет.`);
     }
 
+    discoverTower(kind);
+
     if (towerSlots.includes(kind)) {
       setSelectedTower(kind);
       setMessage(`${getTowerKind(kind).name} уже есть в слотах.`);
@@ -4109,6 +4632,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         lastShotAt: 0,
         attackCount: 0,
         lastTargetCell: null,
+        createdAt: Date.now(),
       },
     ]);
     setSelectedTowerId(towerId);
@@ -4172,6 +4696,13 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     setEnemies([]);
     setSpawnedCount(0);
     setIsWaveRunning(false);
+    setIsSecretWaveActive(false);
+    setSecretWaveReady(false);
+    setRelicCounts({ ...emptyRelicCounts });
+    setPendingRelicChoices([]);
+    setBossCutsceneWave(null);
+    setShownBossCutsceneKeys([]);
+    waveKillCoinsRef.current = 0;
     setWaveTimeLeft(getWaveDuration(startWaveNumber, nextGameMode, mode.maxWaves));
     setCommentatorMessage('');
     runChallengeRef.current = { tookDamage: false, skippedWave: false };
@@ -4293,8 +4824,40 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     }
   }
 
-  function startWave() {
+  function handleSecretWaveProbe() {
+    if (isWaveRunning || isVictory || baseHp === 0) return;
+
+    const now = Date.now();
+    const previousProbe = secretWaveProbeRef.current;
+    const clicks = now - previousProbe.lastClickAt <= secretWaveProbeWindowMs ? previousProbe.clicks + 1 : 1;
+    secretWaveProbeRef.current = { clicks, lastClickAt: now };
+
+    if (clicks >= secretWaveProbeClicks) {
+      secretWaveProbeRef.current = { clicks: 0, lastClickAt: 0 };
+      setSecretWaveReady(true);
+      setMessage('Секретная волна найдена. Запусти следующую волну, пока разлом открыт.');
+      setCommentatorMessage('Комментатор: это скрытый сигнал. Враги пойдут быстрее, но награда будет выше.');
+    }
+  }
+
+  function startWave(skipBossCutscene = false) {
     if (isWaveRunning || baseHp === 0 || isVictory || (!isTimeLoopMode && wave > selectedMaxWaves)) return;
+    if (pendingRelicChoices.length > 0) {
+      setMessage('Сначала выбери реликвию после прошлой волны.');
+      return;
+    }
+
+    const bossCutsceneKey = `${gameMode}-${difficulty}-${wave}`;
+    if (!skipBossCutscene && (hasFinalBossInCurrentWave || hasBossServantInCurrentWave) && !shownBossCutsceneKeys.includes(bossCutsceneKey)) {
+      setBossCutsceneWave(wave);
+      return;
+    }
+
+    if (skipBossCutscene) {
+      setShownBossCutsceneKeys((current) => (current.includes(bossCutsceneKey) ? current : [...current, bossCutsceneKey]));
+      setBossCutsceneWave(null);
+    }
+
     activateAudio();
     if (practiceTutorialActive && tutorialStep !== 'startWave') {
       setMessage('Сначала поставь башню на подсвеченную платформу.');
@@ -4310,7 +4873,14 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
     setSelectedTowerId(null);
     setEnemies([]);
     setSpawnedCount(0);
-    setWaveTimeLeft(getWaveDuration(wave, gameMode, selectedMaxWaves));
+    waveKillCoinsRef.current = 0;
+    const willStartSecretWave = secretWaveReady;
+    setSecretWaveReady(false);
+    setIsSecretWaveActive(willStartSecretWave);
+    setWaveTimeLeft(willStartSecretWave ? secretWaveDuration : getWaveDuration(wave, gameMode, selectedMaxWaves));
+    nextTowerDecayAtRef.current = selectedDifficultyData.towerDecaySeconds
+      ? Date.now() + selectedDifficultyData.towerDecaySeconds * 1000
+      : 0;
     playSound('waveStart');
     setIsWaveRunning(true);
     setBattleSummary((current) => ({ ...current, xp: current.xp + 3 }));
@@ -4327,9 +4897,15 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       return;
     }
 
-    void requestWaveCommentary(wave, era.name, selectedDifficultyData, isTimeLoopMode || isFinalCampaignMission);
+    if (willStartSecretWave) {
+      setCommentatorMessage('Комментатор: секретная волна активна. Быстрые искажения несут больше монет.');
+    } else {
+      void requestWaveCommentary(wave, era.name, selectedDifficultyData, isTimeLoopMode || isFinalCampaignMission);
+    }
     setMessage(
-      hasFinalBossInCurrentWave
+      willStartSecretWave
+        ? `Секретная волна ${wave}: разлом открыл короткий путь через ${era.name.toLowerCase()}.`
+        : hasFinalBossInCurrentWave
         ? `Волна ${wave}: временной босс идет через ${era.name.toLowerCase()}. Режим: ${selectedDifficultyData.name}.`
         : hasBossServantInCurrentWave
           ? `Волна ${wave}: служащий финального босса идет через ${era.name.toLowerCase()}. Чем ближе финал, тем он сильнее.`
@@ -4346,6 +4922,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       setEnemies([]);
       setSpawnedCount(0);
       setIsWaveRunning(false);
+      setIsSecretWaveActive(false);
       setWaveTimeLeft(0);
       setIsVictory(true);
       setMessage('Победа! Финальная волна пропущена, линия времени удержана.');
@@ -4354,8 +4931,10 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
 
     const nextEraIndex = (eraIndex + 1) % eras.length;
     const refund = getLandscapeRefund(towers);
+    const killBonus = getWaveKillRebuildBonus(waveKillCoinsRef.current);
     setEnemies([]);
     setSpawnedCount(0);
+    setIsSecretWaveActive(false);
     setTowers([]);
     setSelectedTowerId(null);
     setWave(nextWave);
@@ -4365,9 +4944,9 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       setSelectedEraMissionId((currentMissionId) => (currentMissionId % 5) + 1);
     }
     setWaveTimeLeft(getWaveDuration(nextWave, gameMode, selectedMaxWaves));
-    setCoins((current) => current + 10 + refund);
-    setMessage(`Ландшафт изменился. Башни разобраны, возвращено ${refund} монет.`);
-    setMessage(`Волна пропущена. Сразу идет волна ${nextWave}.`);
+    setCoins((current) => current + Math.round(selectedDifficultyData.waveClearBonus * 0.35) + refund + killBonus);
+    waveKillCoinsRef.current = 0;
+    setMessage(`Волна пропущена. Башни исчезли: возврат ${refund} монет + бонус ${killBonus}. Идет волна ${nextWave}.`);
   }
 
   function restartGame() {
@@ -4563,6 +5142,10 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       className={[
         'game-shell',
         screen === 'battle' && baseHp === 0 ? 'defeat-state' : '',
+        hpDamagePulse ? 'hp-damage-pulse' : '',
+        isCriticalBaseHp ? 'critical-base-hp' : '',
+        secretWaveReady ? 'secret-wave-ready' : '',
+        isSecretWaveActive ? 'secret-wave-active' : '',
         performanceMode ? 'performance-mode' : '',
       ].join(' ')}
       style={{ '--era': era.accent } as CSSProperties}
@@ -4771,6 +5354,9 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
             <button className="secondary" type="button" onClick={() => openScreenWithTransition('achievements')}>
               {t.achievements} {completedAchievements}/{achievements.length}
             </button>
+            <button className="secondary" type="button" onClick={() => openScreenWithTransition('encyclopedia')}>
+              Энциклопедия
+            </button>
             <button className="secondary" type="button" onClick={() => openSettings()}>
               {t.settings}
             </button>
@@ -4779,6 +5365,75 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
             </button>
             <button className="secondary" type="button" onClick={() => openScreenWithTransition('tutorial')}>
               {t.tutorial}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {screen === 'encyclopedia' && (
+        <section className="encyclopedia-screen">
+          <span className="broken-clock screen-clock achievement-clock" aria-hidden="true" />
+          <span className="time-shard achievement-shard" aria-hidden="true" />
+          <div className="screen-heading">
+            <h3>Энциклопедия</h3>
+            <p>Информация открывается после покупки башни или победы над врагом.</p>
+          </div>
+          <div className="encyclopedia-layout">
+            <div className="encyclopedia-panel">
+              <div className="loadout-panel-heading">
+                <strong>Башни</strong>
+                <span>{discoveredTowerIds.length}/{availableTowerKinds.length}</span>
+              </div>
+              <div className="encyclopedia-list">
+                {availableTowerKinds.map((tower) => {
+                  const isDiscovered = discoveredTowerSet.has(tower.id);
+
+                  return (
+                    <article className={isDiscovered ? 'encyclopedia-card' : 'encyclopedia-card locked'} key={tower.id}>
+                      <span>{isDiscovered ? renderTowerMark(tower) : '?'}</span>
+                      <div>
+                        <strong>{isDiscovered ? getTowerUiName(tower, language) : 'Неизвестная башня'}</strong>
+                        <p>
+                          {isDiscovered
+                            ? `${tower.levelDescriptions[0]} Урон ${tower.damage}, радиус ${tower.range}, цена ${tower.cost}.`
+                            : 'Купи или добавь башню в набор, чтобы открыть описание.'}
+                        </p>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="encyclopedia-panel">
+              <div className="loadout-panel-heading">
+                <strong>Враги</strong>
+                <span>{discoveredEnemyIds.length}/{easyMonsterIds.length}</span>
+              </div>
+              <div className="encyclopedia-list">
+                {easyMonsterIds.map((enemyId) => {
+                  const enemy = getEnemyKind(enemyId);
+                  const isDiscovered = discoveredEnemySet.has(enemyId);
+
+                  return (
+                    <article className={isDiscovered ? 'encyclopedia-card' : 'encyclopedia-card locked'} key={enemyId}>
+                      <span>{isDiscovered ? <MonsterIcon id={enemyId} /> : '?'}</span>
+                      <div>
+                        <strong>{isDiscovered ? getEasyMonsterName(enemyId) : 'Неизвестный враг'}</strong>
+                        <p>
+                          {isDiscovered
+                            ? `HP ${enemy.hp}, скорость ${enemy.speed}, награда ${enemy.reward}. ${enemy.ability}`
+                            : 'Победи этого врага в бою, чтобы открыть описание.'}
+                        </p>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <div className="menu-actions">
+            <button className="ghost" type="button" onClick={() => openScreenWithTransition('start')}>
+              {t.back}
             </button>
           </div>
         </section>
@@ -5075,7 +5730,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         <button
           className="wave-action era-wave-action"
           type="button"
-          onClick={isWaveRunning ? skipWave : startWave}
+          onClick={isWaveRunning ? skipWave : () => startWave()}
           disabled={isWaveRunning ? !canSkipWave : baseHp === 0 || isVictory}
         >
           {isVictory
@@ -5160,11 +5815,16 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
               <span className="difficulty-copy">
                 <strong>{modeText.name}</strong>
                 <span>{modeText.description}</span>
+                <em>{modeText.bossLore}</em>
+                <small>{modeText.tactic}</small>
+                <small>{modeText.fact}</small>
               </span>
               <span className="difficulty-meta">
                 <small><b>{modeMetaText.boss}</b>{modeText.boss}</small>
                 <small><b>{modeMetaText.waves}</b>{modeStartWave}-{mode.maxWaves}</small>
                 <small><b>{modeMetaText.levels}</b>{selectedEraMissions.length}</small>
+                <small><b>Карта</b>{mode.buildCellMultiplier < 1 ? `${Math.round(mode.buildCellMultiplier * 100)}% платформ` : 'все платформы'}</small>
+                {mode.towerDecaySeconds && <small><b>Распад</b>каждые {mode.towerDecaySeconds}с</small>}
               </span>
               <small>
                 {modeText.boss} · {mode.startCoins} {t.coins} · {mode.startBaseHp} {t.baseHp}
@@ -5310,7 +5970,15 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
         <div className="battle-side-panel">
           <div className="battle-control-panel">
             <div className="stats">
-              <span>{t.wave} {wave}/{waveLimitLabel}</span>
+              <button
+                className={secretWaveReady ? 'secret-wave-trigger ready' : 'secret-wave-trigger'}
+                type="button"
+                onClick={handleSecretWaveProbe}
+                aria-label="Проверить искажение волны"
+                title={secretWaveReady ? 'Секретная волна готова' : undefined}
+              >
+                {secretWaveReady ? '???' : `${t.wave} ${wave}/${waveLimitLabel}`}
+              </button>
               <span>{waveTimeLeft} {t.seconds}</span>
               <span>{coins} {t.coins}</span>
               <span>{baseHp} {t.baseHp}</span>
@@ -5518,6 +6186,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                     'time-distorted',
                     enemy.isBoss ? 'boss' : '',
                     enemy.isBossServant ? 'boss-servant' : '',
+                    enemy.isSecretWave ? 'secret-wave' : '',
                     enemy.slowedUntil > renderNow ? 'slowed' : '',
                     enemy.speedBoostUntil > renderNow ? 'boosted' : '',
                     isEnemyInvulnerable(enemy, renderNow) ? 'invulnerable' : '',
@@ -5546,6 +6215,7 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
                   {enemy.lastDamage > 0 && <span className="damage-pop">-{enemy.lastDamage}</span>}
                   <span className="enemy-tooltip">
                     {enemy.isBoss ? `${selectedBossProfile.name} · ` : ''}
+                    {enemy.isSecretWave ? 'Секретная волна · ' : ''}
                     {enemy.monsterId ? `${getEasyMonsterName(enemy.monsterId)} · ` : ''}
                     HP {Math.max(0, Math.ceil(enemy.hp))}/{enemy.maxHp}
                     {enemy.monsterId ? ` · скорость ${getEnemyKind(enemy.monsterId).speed} · ${getEnemyKind(enemy.monsterId).ability}` : ' · скорость 3 · оглушает башни, ускоряет врагов, разгоняется при 25% HP'}
@@ -5560,6 +6230,55 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
       </div>
 
       <p className="message">{message}</p>
+      {pendingRelicChoices.length > 0 && baseHp > 0 && (
+        <div className="relic-overlay" role="dialog" aria-modal="true" aria-labelledby="relic-title">
+          <div className="relic-modal">
+            <span className="relic-mark" aria-hidden="true">✦</span>
+            <h3 id="relic-title">Выбери реликвию</h3>
+            <p>Волна отбита. Один бонус останется с тобой до конца забега.</p>
+            <div className="relic-grid">
+              {pendingRelicChoices.map((relicId) => {
+                const relic = relicCatalog[relicId];
+
+                return (
+                  <button className="relic-card" type="button" key={relicId} onClick={() => chooseRelic(relicId)}>
+                    <strong>{relic.title}</strong>
+                    <span>{relic.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+      {bossCutsceneWave !== null && baseHp > 0 && (
+        <div className="boss-cutscene-overlay" role="dialog" aria-modal="true" aria-labelledby="boss-cutscene-title">
+          <div className="boss-cutscene-modal">
+            <span className={`boss-cutscene-portrait ${selectedBossProfile.portraitClass}`} aria-hidden="true">
+              <img src={selectedBossProfile.sprite} alt="" draggable={false} />
+            </span>
+            <div className="boss-cutscene-copy">
+              <span>{selectedBossProfile.name}</span>
+              <h3 id="boss-cutscene-title">
+                {hasFinalBossInCurrentWave ? 'Финальный разлом открыт' : 'Служащий босса выходит'}
+              </h3>
+              <p>
+                {hasFinalBossInCurrentWave
+                  ? 'Ты дошел до моей волны. Сейчас линия времени узнает, насколько слабой была твоя защита.'
+                  : 'Мой служащий проверит твою оборону. Ошибешься один раз — и портал треснет.'}
+              </p>
+              <div className="boss-cutscene-actions">
+                <button type="button" onClick={() => startWave(true)}>
+                  В бой
+                </button>
+                <button className="secondary" type="button" onClick={() => setBossCutsceneWave(null)}>
+                  Подготовиться
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {isVictory && (
         <div className="victory-overlay" role="dialog" aria-modal="true" aria-labelledby="victory-title">
           <div className="victory-modal">
@@ -5621,8 +6340,17 @@ export function TimeTowerDefense({ userEmail, userId }: { userEmail: string; use
               <span className="clock-number clock-number-10" data-roman="X">10</span>
               <span className="clock-number clock-number-11" data-roman="XI">11</span>
             </span>
+            <div className="defeat-cutscene">
+              <span className={`defeat-boss-portrait ${selectedBossProfile.portraitClass}`} aria-hidden="true">
+                <img src={selectedBossProfile.sprite} alt="" draggable={false} />
+              </span>
+              <div className="defeat-boss-copy">
+                <span>{selectedBossProfile.name}</span>
+                <h3 id="defeat-title">{selectedBossTaunt.title}</h3>
+                <p>{selectedBossTaunt.line}</p>
+              </div>
+            </div>
             <span className="defeat-mark" aria-hidden="true">!</span>
-            <h3 id="defeat-title">{t.defeat}</h3>
             <p>{t.defeatSubtitle}</p>
             <strong>{t.gameTime}: {formatDuration(defeatDurationSeconds)}</strong>
             <div className="defeat-actions">
